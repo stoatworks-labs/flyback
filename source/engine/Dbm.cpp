@@ -362,7 +362,14 @@ bool Field::TouchesGround( int cell, int& groundCell ) const
 	for( int k = 0; k < 8; ++k )
 	{
 		const int n = lattice.Index( i + kDx[ k ], j + kDy[ k ] );
-		if( kind[ static_cast< size_t >( n ) ] == Cell::Ground )
+		// The ring is the room's far walls. Held near ground it is ground, and
+		// reaching it ends the discharge: without this a spark that found the
+		// ring crawled round the whole frame along it, where the field beside a
+		// 0 V wall is strongest, and never completed (a 1.6 m Van de Graaff
+		// spark, 1000 sites, 86 ms). A ring held at a middling potential -- the
+		// ladder's, 0.5 -- is not ground.
+		if( kind[ static_cast< size_t >( n ) ] == Cell::Ground
+		    || ( kind[ static_cast< size_t >( n ) ] == Cell::Wall && lattice.Potential( n ) <= 0.25f ) )
 		{
 			groundCell = n;
 			return true;

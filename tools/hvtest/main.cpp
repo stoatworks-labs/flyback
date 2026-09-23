@@ -929,13 +929,16 @@ int runLadder( const Perturb& perturb )
 		       fmt( "each restrike follows its extinction: %d periods equal their climb to one frame", period ) );
 	}
 
-	// 2. As shipped: the roots lag and the arc bows. It still goes out at L*,
-	// sooner, and its apex rises at the rise speed.
+	// 2. As shipped: the roots lag and the arc bows. On the tall rods it still
+	// goes out at L*, sooner; and its apex rises at the rise speed.
 	{
+		Settings tall  = s;
+		tall.rodLength = 0.60;
+		tall.rodSpread = 20.0 * kPi / 180.0;
 		Engine engine;
 		Frame frame;
 		std::vector< std::pair< double, double > > apex;
-		RunEngine( engine, s, 6.0, frame, 0.0, [ & ]( int i ) {
+		RunEngine( engine, tall, 6.0, frame, 0.0, [ & ]( int i ) {
 			const LadderProbe& p = engine.Ladder();
 			if( p.lit && !p.strikes.empty() )
 				apex.push_back( { i / kFps - p.strikes.back(), p.apex } );
@@ -960,12 +963,35 @@ int runLadder( const Perturb& perturb )
 			}
 		Check( samples > 10 && onTime == samples,
 		       fmt( "the apex rises at %.2f m/s: %d of %d samples at height v t to one frame", rise, onTime, samples ) );
-		const double straight = ( lStar - 0.003 ) / ( 2.0 * rise * std::tan( 0.5 * s.rodSpread ) );
+		const double straight = ( lStar - 0.003 ) / ( 2.0 * rise * std::tan( 0.5 * tall.rodSpread ) );
 		const double took     = p.extinctions.empty() ? 0.0 : p.extinctions[ 0 ] - p.strikes[ 0 ];
 		Check( took > 0.0 && took < straight, fmt( "and the bowed arc goes out sooner than the straight one: %.3f s < %.3f s", took, straight ) );
 	}
 
-	// 3. A softer supply: R_s doubled gives a shorter L*, and the arc goes out
+	// 3. The shipped geometry: 0.4 m rods at 14 degrees. Every arc goes out
+	// either at L* or by running off the top of the rods -- nothing else ends
+	// one -- and those at L* are at it to a step.
+	{
+		Engine engine;
+		Frame frame;
+		RunEngine( engine, s, 6.0, frame );
+		const LadderProbe& p = engine.Ladder();
+		int atStar = 0, atTop = 0, other = 0;
+		for( size_t k = 0; k < p.lengthsAt.size(); ++k )
+		{
+			if( p.overTheTop[ k ] )
+				++atTop;
+			else if( p.lengthsAt[ k ] - lStar >= -1e-9 && p.lengthsAt[ k ] - lStar <= h )
+				++atStar;
+			else
+				++other;
+		}
+		Check( p.lengthsAt.size() >= 5 && other == 0,
+		       fmt( "default rods (%.2f m, %.0f deg): %zu extinctions, %d at L*, %d off the top, %d anything else", s.rodLength,
+		            s.rodSpread * 180.0 / kPi, p.lengthsAt.size(), atStar, atTop, other ) );
+	}
+
+	// 4. A softer supply: R_s doubled gives a shorter L*, and the arc goes out
 	// lower.
 	{
 		Settings soft = s;
@@ -1205,13 +1231,23 @@ int runLight( const Perturb& perturb )
 			const double measured = rig.LightSum( &edge, 2 );
 			const double core     = rig.LightSum( nullptr, 0, true );
 			const int stores       = rig.plugin->RendererForTest().FloatStores();
-			// Tolerance from the arithmetic, not from a run: the pixel-centre
-			// sampling of a Gaussian of at least 0.8 px sums to its integral to
-			// within 2 exp(-2 pi^2 0.8^2) (Poisson summation); Abramowitz &
-			// Stegun's erf is good to 1.5e-7; and each float32 store on the way
-			// (the deposit, `stores` pyramid and light passes) is good to 2^-24,
-			// taken worst-case as all in one direction.
-			const double tol = 2.0 * std::exp( -2.0 * kPi * kPi * 0.64 ) + 1.5e-7 + ( stores + 1 ) * std::ldexp( 1.0, -24 ) * 16.0;
+			// Tolerance from the arithmetic, not from a run. Summing a profile
+			// at pixel centres instead of integrating it errs by the sum of its
+			// Fourier transform at the non-zero integers (Poisson summation):
+			//  - along a segment, the Gaussian part: 2 exp(-2 pi^2 sigma^2);
+			//  - across it, the same, plus the pedestal-subtracted profile's
+			//    slope jump J = 4.5 phi(4.5) / sigma^2 where it meets zero at
+			//    +-4.5 sigma, whose transform falls as J / (2 pi k)^2 at each of
+			//    two edges: summed over k != 0 that is at most J / 6;
+			// at the narrowest sigma, 0.8 px. Plus Abramowitz & Stegun's erf,
+			// 1.5e-7, and 2^-24 for each float32 store on the way, all taken
+			// worst-case in one direction. (The slope term was missed in the
+			// first derivation and a re-tuned spark exceeded the bound by it --
+			// AGENTS.md.)
+			const double sigma = 0.8;
+			const double phi45 = std::exp( -0.5 * 4.5 * 4.5 ) / std::sqrt( 2.0 * kPi );
+			const double tol   = 2.0 * 2.0 * std::exp( -2.0 * kPi * kPi * sigma * sigma ) + 4.5 * phi45 / ( 6.0 * sigma * sigma )
+			                 + 1.5e-7 + ( stores + 1 ) * std::ldexp( 1.0, -24 ) * 16.0;
 			const double claim = perturb.lightPerBranch ? expected * std::max( 1, branches ) : expected;
 			const double rel   = std::fabs( measured - ( emitted - expected + claim ) ) / std::max( emitted, 1e-30 );
 			Check( expected > 0.0 && rel <= tol,

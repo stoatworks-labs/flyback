@@ -2,8 +2,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
-#include <cstdlib>
 #include <cmath>
 
 namespace flyback
@@ -54,7 +52,7 @@ double SceneHeight( Machine machine )
 {
 	switch( machine )
 	{
-	case Machine::Ladder: return 0.60;
+	case Machine::Ladder: return 0.52;
 	case Machine::Tesla: return 2.00;
 	case Machine::VanDeGraaff: return 0.70;
 	case Machine::Globe: return 0.50;
@@ -669,7 +667,7 @@ public:
 class LadderMachine : public MachineBase
 {
 public:
-	static constexpr double kBottomY   = -0.21;
+	static constexpr double kBottomY   = -0.19;
 	static constexpr double kBottomGap = 0.003;
 	static constexpr double kRodRadius = 0.003;
 	static constexpr double kSubstep   = 0.001;
@@ -812,11 +810,12 @@ public:
 		return true;
 	}
 
-	void Extinguish( double t, double length )
+	void Extinguish( double t, double length, bool top = false )
 	{
 		probe.lit = false;
 		probe.extinctions.push_back( t );
 		probe.lengthsAt.push_back( length );
+		probe.overTheTop.push_back( top ? 1 : 0 );
 		column.clear();
 	}
 
@@ -908,7 +907,6 @@ public:
 		g.allowed        = &allowed;
 		const int cap    = static_cast< int >( 6.0 * Length() / h ) + 16;
 		const GrowthResult r = field.Grow( tree, cap, kHuge, rng, t, g );
-		if( getenv( "FB_DEBUG" ) ) fprintf( stderr, "regrow: grown %d reached %d cap %d len %.3f cands %zu\n", r.grown, r.reachedGround, cap, Length(), field.LastCandidates() );
 		if( !r.reachedGround )
 			tree.Clear();// the column itself is drawn instead
 	}
@@ -970,10 +968,12 @@ public:
 			probe.length       = after;
 			const double lStar = probe.extinction;
 
-			if( after >= lStar || OffTheTop() )
+			const bool top = after < lStar && OffTheTop();
+			if( after >= lStar || top )
 			{
-				// Where in the substep the column reached L*, linearly.
-				const double f = after > before ? std::clamp( ( lStar - before ) / ( after - before ), 0.0, 1.0 ) : 1.0;
+				// Where in the substep the column reached L*, linearly. (Running
+				// off the top is simply the end of the substep.)
+				const double f = top ? 1.0 : after > before ? std::clamp( ( lStar - before ) / ( after - before ), 0.0, 1.0 ) : 1.0;
 				const double te = a + f * dt;
 				const double I  = ArcCurrent( ayrton, s.supply, std::min( before, lStar ) );
 				const double P  = ( s.supply.openVolts - I * s.supply.sourceOhms ) * I;
@@ -983,8 +983,8 @@ public:
 				// in this frame, before the new one starts at the bottom.
 				EmitArc( light, I, out );
 				light = 0.0;
-				Extinguish( te, after );
-				Strike( te );
+				Extinguish( top ? b : te, after, top );
+				Strike( top ? b : te );
 				continue;
 			}
 
@@ -1076,6 +1076,13 @@ public:
 		return 0.5 * s.gap + B();
 	}
 
+	/// The spheres and a margin; past it the field is the room's, and a
+	/// lattice over the whole 16:9 frame cost twice as much for nothing.
+	double FieldWidth() const override
+	{
+		return 1.6 * H();
+	}
+
 	uint64_t PaintKey() const override
 	{
 		uint64_t k = 3;
@@ -1088,6 +1095,22 @@ public:
 	{
 		PaintDisc( Ax(), kCentreY, s.sphere, Paint::Source, 1.0f );
 		PaintDisc( Bx(), kCentreY, B(), Paint::Ground, 0.0f );
+		// Where a spark may START: breakdown begins where the surface field
+		// first reaches Peek's value, which is the cap facing the gap (the
+		// two-sphere field falls away from the axis). Without this one spark in
+		// four sprouted from the back of the sphere and wandered a metre and a
+		// half round the frame before finding ground -- 1000 sites, 86 ms.
+		// Corona is not restricted: it glows from the whole sphere.
+		{
+			const double h = field.Step();
+			sparkAllowed.assign( static_cast< size_t >( field.Nx() ) * field.Ny(), 1 );
+			ForBox( Ax() - s.sphere - 3 * h, kCentreY - s.sphere - 3 * h, Ax() + s.sphere + 3 * h, kCentreY + s.sphere + 3 * h,
+			        [ & ]( int cell, double x, double y ) {
+				        const double dx = x - Ax(), dy = y - kCentreY, r = Hypot( dx, dy );
+				        if( r > s.sphere && r <= s.sphere + 2.5 * h && dx < r * std::cos( 50.0 * kPi / 180.0 ) )
+					        sparkAllowed[ static_cast< size_t >( cell ) ] = 0;
+			        } );
+		}
 		PaintCapsule( Bx(), kCentreY, Bx(), kBaseY, 0.010, Paint::Ground, 0.0f );
 		ForBox( -kHuge, -kHuge, kHuge, kBaseY, [ & ]( int cell, double, double ) { PaintCell( cell, Paint::Ground, 0.0f ); } );
 	}
@@ -1121,7 +1144,9 @@ public:
 	{
 		tree.Clear();
 		field.Adopt( tree );
-		field.Grow( tree, 4000, kHuge, rng, t, Growth( s.eta, true ) );
+		GrowthSettings g = Growth( s.eta, true );
+		g.allowed        = &sparkAllowed;
+		field.Grow( tree, 4000, kHuge, rng, t, g );
 		Event e;
 		e.time      = t;
 		e.joules    = 0.5 * spheres.capacitance * volts * volts;
@@ -1208,6 +1233,7 @@ public:
 	double lastTime  = 0.0;
 	bool fire        = false;
 	Tree corona;
+	std::vector< uint8_t > sparkAllowed;
 };
 
 //===========================================================================
@@ -1285,7 +1311,9 @@ public:
 
 	int Filaments() const
 	{
-		return std::clamp( static_cast< int >( std::lround( 3.0 + 0.3 * s.supply.openVolts / 1000.0 ) ), 4, 14 );
+		// More drive, more filaments: 2 + one per 3.5 kV, so the nominal 25 kV
+		// flyback lights nine.
+		return std::clamp( static_cast< int >( std::lround( 2.0 + s.supply.openVolts / 3500.0 ) ), 3, 14 );
 	}
 
 	void Restart( double t ) override
@@ -1312,21 +1340,16 @@ public:
 		}
 		else if( !nodes.empty() )
 		{
-			// A filament that carries a circuit stays; a dead end that has not
-			// reached the glass lasts as long as its channel stays hot -- tau
-			// -- and is gone after that.
+			// A filament that carries a circuit stays; a dead end does not. The
+			// RF re-strikes the globe every cycle, so a branch that never
+			// reached the glass is gone by the next frame. (Keeping dead ends for
+			// tau, as the coil keeps its streamers, grew a bush of them against
+			// the glass on whichever side the first filaments landed.)
 			std::vector< uint8_t > keep( nodes.size(), 0 );
-			for( size_t i = 0; i < nodes.size(); ++i )
-				if( t1 - nodes[ i ].lastHot < s.memory )
-					keep[ i ] = 1;
 			for( size_t i = 0; i < nodes.size(); ++i )
 				if( nodes[ i ].grounded )
 					for( int n = static_cast< int >( i ); n >= 0; n = nodes[ static_cast< size_t >( n ) ].parent )
 						keep[ static_cast< size_t >( n ) ] = 1;
-			// And an ancestor of anything kept is kept.
-			for( size_t i = nodes.size(); i-- > 0; )
-				if( keep[ i ] && nodes[ i ].parent >= 0 )
-					keep[ static_cast< size_t >( nodes[ i ].parent ) ] = 1;
 			// Drift: each filament re-forms its outer part every frame, a
 			// fraction 1 - exp(-dt / tau) of it at most -- the same channel
 			// memory as the coil's, at the rate the RF re-strikes it.
@@ -1354,19 +1377,47 @@ public:
 		tree.Compact();
 		field.Adopt( tree );
 
-		GrowthSettings g   = Growth( s.eta, false );
-		g.maxConnections   = Filaments();
-		const int sites    = static_cast< int >( 200 * s.reach );
-		field.Grow( tree, sites, kHuge, rng, t1, g );
-		// What carries a circuit this frame is hot again.
+		// Filaments one at a time: each burst grows until one path reaches the
+		// glass, that path becomes an arc (a resistor, no longer a source), and
+		// the dead ends the burst left are dropped -- the RF re-strikes along
+		// the path that made it, not the ones that did not. Grown all at once,
+		// the dead branches beside the first contact sat in the strongest field
+		// in the globe (a conductor at 1 a site from glass at 0.35) and spent
+		// the whole budget crawling along the glass.
+		const int want = Filaments();
+		const int cap  = static_cast< int >( 160 * s.reach );
+		for( int f = 0; f < want; ++f )
 		{
+			const size_t before = tree.Size();
+			GrowthSettings g    = Growth( s.eta, true );
+			const GrowthResult r = field.Grow( tree, cap, kHuge, rng, t1, g );
 			std::vector< Node >& grown = tree.Nodes();
-			for( size_t i = 0; i < grown.size(); ++i )
-				if( grown[ i ].grounded )
-					for( int n = static_cast< int >( i ); n >= 0; n = grown[ static_cast< size_t >( n ) ].parent )
-						grown[ static_cast< size_t >( n ) ].lastHot = t1;
+			if( !r.reachedGround )
+			{
+				for( size_t i = before; i < grown.size(); ++i )
+				{
+					grown[ i ].alive = false;
+					field.Forget( grown[ i ] );
+				}
+				tree.Compact();
+				break;
+			}
+			std::vector< uint8_t > onPath( grown.size(), 0 );
+			for( int n = r.groundNode; n >= 0; n = grown[ static_cast< size_t >( n ) ].parent )
+				onPath[ static_cast< size_t >( n ) ] = 1;
+			for( size_t i = before; i < grown.size(); ++i )
+				if( !onPath[ i ] )
+				{
+					grown[ i ].alive = false;
+					field.Forget( grown[ i ] );
+				}
+			tree.Compact();
+			field.Adopt( tree );
+			// Every connected path is an arc again after Adopt.
+			for( size_t i = 0; i < tree.Nodes().size(); ++i )
+				if( tree.Nodes()[ i ].grounded )
+					field.Conduct( tree, static_cast< int >( i ), kGlassPotential );
 		}
-
 		const double power = s.supply.MaxPower();
 		Emit( tree, power / s.supply.openVolts, kGroundWeight, power * Exposed( t0, t1, exposeFrom ) * s.efficiency, out );
 		if( Exposed( t0, t1, exposeFrom ) > 0.0 )

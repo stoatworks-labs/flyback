@@ -225,6 +225,12 @@ constexpr Line kArgon[] = {
 	{ 460.9, 0.30 }, { 476.5, 0.40 }, { 480.6, 0.40 }, { 488.0, 0.60 }, { 696.5, 0.40 }, { 706.7, 0.30 },
 	{ 738.4, 0.30 }, { 750.4, 0.60 }, { 763.5, 0.80 },
 };
+// Xenon's strong visible Xe I lines, blue-green (NIST ASD; weights
+// approximate).
+constexpr Line kXenon[] = {
+	{ 450.1, 0.40 }, { 452.5, 0.30 }, { 462.4, 0.80 }, { 467.1, 1.00 }, { 473.4, 0.50 },
+	{ 480.7, 0.60 }, { 482.9, 0.40 }, { 484.4, 0.30 }, { 491.7, 0.40 },
+};
 } // namespace
 
 Rgb StreamerColour( Gas gas )
@@ -233,6 +239,20 @@ Rgb StreamerColour( Gas gas )
 	{
 	case Gas::Neon: return FromLines( kNeon, static_cast< int >( sizeof( kNeon ) / sizeof( kNeon[ 0 ] ) ) );
 	case Gas::Argon: return FromLines( kArgon, static_cast< int >( sizeof( kArgon ) / sizeof( kArgon[ 0 ] ) ) );
+	case Gas::NeonXenon:
+	{
+		// Both spectra, the xenon at twice the neon's line weight: xenon's
+		// lower excitation energy lets a small fraction of it emit out of
+		// proportion to its share -- which is why a globe is violet, not the
+		// orange a pure-neon one would be. The ratio is a look, and says so.
+		Line mix[ sizeof( kNeon ) / sizeof( kNeon[ 0 ] ) + sizeof( kXenon ) / sizeof( kXenon[ 0 ] ) ];
+		int n = 0;
+		for( const Line& l : kNeon )
+			mix[ n++ ] = { l.nm, 0.5 * l.weight };
+		for( const Line& l : kXenon )
+			mix[ n++ ] = { l.nm, 1.0 * l.weight };
+		return FromLines( mix, n );
+	}
 	default: return FromLines( kAir, static_cast< int >( sizeof( kAir ) / sizeof( kAir[ 0 ] ) ) );
 	}
 }
@@ -261,6 +281,7 @@ const char* GasName( Gas gas )
 	case Gas::Air: return "Air";
 	case Gas::Neon: return "Neon";
 	case Gas::Argon: return "Argon";
+	case Gas::NeonXenon: return "Neon-Xenon";
 	default: return "?";
 	}
 }

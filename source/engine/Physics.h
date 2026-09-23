@@ -180,6 +180,7 @@ enum class Gas : int
 	Air = 0,
 	Neon,
 	Argon,
+	NeonXenon,///< the classic plasma-globe fill: mostly neon, a little xenon
 	Count
 };
 

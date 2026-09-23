@@ -25,7 +25,7 @@
     - Voltage and Source Impedance trim the chosen Supply's nominal V_oc and
       R_s (x0.5..x2 and x0.25..x4).
     - Branching trims the machine's nominal eta (x0.5..x2): a ladder's arc is
-      eta 4, a Van de Graaff's spark 2.6, a globe's filaments 2, a Tesla
+      eta 4, a Van de Graaff's spark 3.5, a globe's filaments 2, a Tesla
       coil's streamers 1.6, a Lichtenberg figure 1.
     - Detail, Channel Memory and Reach likewise (x0.5..x2, x0.25..x4, x0.25..x4).
     - Efficiency trims the luminous efficiency, 1% nominal (x0.1..x10).

@@ -181,10 +181,11 @@ struct LadderProbe
 	/// How fast the arc's roots slide up the rods, as a fraction of the free
 	/// column's rise. Less than 1 is what bows the arc; exactly 1 keeps it
 	/// straight, which is what `--ladder` uses for the closed-form climb.
-	double rootSpeed    = 0.8;
+	double rootSpeed    = 0.9;
 	std::vector< double > strikes;    ///< times
 	std::vector< double > extinctions;///< times
 	std::vector< double > lengthsAt;  ///< column length at each extinction
+	std::vector< int > overTheTop;    ///< 1 where it went out by running off the top of the rods, not at L*
 	std::vector< double > strikeHeights;
 };
 

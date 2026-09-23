@@ -62,7 +62,7 @@ void FlybackPlugin::Declare()
 	params[ PT_MEMORY ]    = 0.5f;
 	params[ PT_REACH ]     = 0.5f;
 
-	params[ PT_ROD_SPREAD ] = 0.1875f;
+	params[ PT_ROD_SPREAD ] = 0.3750f;
 	params[ PT_ROD_LENGTH ] = 0.4286f;
 	params[ PT_RISE ]       = 0.5943f;
 	params[ PT_WIND ]       = 0.5f;
@@ -187,7 +187,7 @@ void FlybackPlugin::Declare()
 
 	standard( PT_EFFICIENCY, "Efficiency" );
 	standard( PT_GLOW, "Glow" );
-	option( PT_GAS, "Gas", { "Air", "Neon", "Argon" } );
+	option( PT_GAS, "Gas", { "Air", "Neon", "Argon", "Neon-Xenon" } );
 	standard( PT_SHUTTER, "Shutter" );
 	standard( PT_PERSISTENCE, "Persistence" );
 	SetParamInfo( PT_APPARATUS, "Show Apparatus", FF_TYPE_BOOLEAN, params[ PT_APPARATUS ] > 0.5f );

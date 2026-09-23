@@ -35,10 +35,10 @@ Nominal NominalFor( Machine machine )
 	// physics and no light total.
 	switch( machine )
 	{
-	case Machine::Ladder: return { 4.0, 128, 0.020, 0.500, physics::SupplyKind::NST };
+	case Machine::Ladder: return { 4.0, 128, 0.020, 0.900, physics::SupplyKind::NST };
 	case Machine::Tesla: return { 1.6, 136, 0.020, 0.400, physics::SupplyKind::NST };
-	case Machine::VanDeGraaff: return { 2.6, 160, 0.020, 4.000, physics::SupplyKind::NST };
-	case Machine::Globe: return { 2.0, 112, 0.080, 1.500, physics::SupplyKind::Flyback };
+	case Machine::VanDeGraaff: return { 3.5, 144, 0.020, 4.000, physics::SupplyKind::NST };
+	case Machine::Globe: return { 2.0, 96, 0.080, 3.000, physics::SupplyKind::Flyback };
 	case Machine::Lichtenberg: return { 1.0, 176, 0.020, 1.000, physics::SupplyKind::ZVS };
 	default: return { 1.6, 136, 0.020, 0.400, physics::SupplyKind::NST };
 	}

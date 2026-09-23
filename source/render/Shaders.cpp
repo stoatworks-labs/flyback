@@ -357,6 +357,9 @@ void main()
 			vec4 A = ShapeA[ i ];
 			vec4 B = ShapeB[ i ];
 			float material = B.z;
+			//Over the clip, the clip is the room: no floor of our own over it.
+			if( HasClip > 0.5 && material > 3.5 && material < 4.5 )
+				continue;
 			float d;
 			vec3 n = vec3( 0.0, 0.0, 1.0 );
 			if( A.x < 0.5 )
