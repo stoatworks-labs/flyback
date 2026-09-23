@@ -1,0 +1,45 @@
+# Flyback demo reel: 16 s at 60 fps, the five machines in turn.
+#     hvtest --film 960 --size 1280x720 --script docs/demo.cues \
+#       | ffmpeg -f rawvideo -pix_fmt rgba -s 1280x720 -r 60 -i - -pix_fmt yuv420p demo.mp4
+#
+# Tracks are held before their first key and interpolated BETWEEN keys, so a
+# dropdown changes on a pair of keys a frame apart (`179 Preset 1 / 180
+# Preset 2`), and a button press is three keys (`29 Fire 0 / 30 Fire 1 /
+# 31 Fire 0`) -- without the key before, the value would ramp and cross 0.5
+# halfway there.
+
+# 0-3 s: the Tesla coil, the interrupter sweeping up from 30 to 400 BPS: the
+# streamers lengthen as the channel stays hot between bangs.
+0    Preset    1
+0    BPS       0.3
+90   BPS       0.3
+170  BPS       0.85
+179  Preset    1
+
+# 3-6 s: the Jacob's ladder, climbing, bowing, snapping at L*, restriking.
+180  Preset    2
+359  Preset    2
+
+# 6-9 s: the Van de Graaff: corona, then a spark every C V_b / I. Fired once
+# more by hand at 7.5 s.
+360  Preset    3
+449  Fire      0
+450  Fire      1
+451  Fire      0
+539  Preset    3
+
+# 9-12.5 s: the plasma globe; a finger on the glass at 10.5 s pulls the
+# filaments together.
+540  Preset    4
+540  Finger    0
+629  Finger    0
+630  Finger    1
+540  Finger X  0.62
+540  Finger Y  0.78
+749  Preset    4
+
+# 12.5-16 s: a Lichtenberg figure growing, and a fresh one at 14.5 s.
+750  Preset    5
+869  Fire      0
+870  Fire      1
+871  Fire      0

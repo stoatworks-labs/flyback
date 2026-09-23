@@ -1749,39 +1749,58 @@ int runNegative()
 //===========================================================================
 // --bench
 //===========================================================================
-int runBench()
+int runBench( const std::vector< std::string >& settings, int only )
 {
 	std::printf( "\n=== bench: GPU ms/frame through ProcessOpenGL, and the engine's CPU ms/frame\n" );
 	std::printf( "  (this machine was shared with other work while it ran: the load average is printed)\n" );
 	double load[ 3 ] = {};
 	getloadavg( load, 3 );
 	std::printf( "  load average %.1f %.1f %.1f\n\n", load[ 0 ], load[ 1 ], load[ 2 ] );
-	std::printf( "  %-15s %-6s %9s %9s %9s\n", "machine", "size", "frame ms", "engine ms", "engine max" );
+	std::printf( "  %-15s %-6s %9s %9s %9s %9s\n", "machine", "size", "GPU ms", "frame ms", "engine ms", "engine max" );
+	GLuint query = 0;
+	glGenQueries( 1, &query );
 	for( int m = 0; m < static_cast< int >( Machine::Count ); ++m )
 		for( const auto& size : { std::pair< int, int >( 1280, 720 ), std::pair< int, int >( 1920, 1080 ), std::pair< int, int >( 3840, 2160 ) } )
 		{
+			if( only >= 0 && m != only )
+				continue;
 			Rig rig;
 			if( !rig.Init( size.first, size.second, false ) )
 				return 1;
 			rig.Set( PT_MACHINE, static_cast< float >( m ) );
+			for( const std::string& setting : settings )
+			{
+				const size_t eq = setting.find( '=' );
+				if( eq == std::string::npos || !rig.Set( setting.substr( 0, eq ), std::strtof( setting.substr( eq + 1 ).c_str(), nullptr ) ) )
+					return 2;
+			}
 			rig.Render( 90 );
 			glFinish();
 			constexpr int kTimed = 120;
-			double engineSum = 0.0, engineMax = 0.0;
+			double engineSum = 0.0, engineMax = 0.0, gpuSum = 0.0;
 			const auto start = std::chrono::steady_clock::now();
 			for( int i = 0; i < kTimed; ++i )
 			{
+				// The GPU's own clock around the whole ProcessOpenGL: what the
+				// passes cost the GPU, whatever the CPU was doing.
+				glBeginQuery( GL_TIME_ELAPSED, query );
 				rig.Render( 1 );
+				glEndQuery( GL_TIME_ELAPSED );
+				GLuint64 ns = 0;
+				glGetQueryObjectui64v( query, GL_QUERY_RESULT, &ns );
+				gpuSum += static_cast< double >( ns ) * 1e-6;
 				const double e = rig.plugin->EngineForTest().LastMillis();
 				engineSum += e;
 				engineMax = std::max( engineMax, e );
 			}
 			glFinish();
 			const double ms = std::chrono::duration< double, std::milli >( std::chrono::steady_clock::now() - start ).count() / kTimed;
-			std::printf( "  %-15s %4dp  %9.2f %9.2f %9.2f\n", MachineName( static_cast< Machine >( m ) ), size.second, ms,
-			             engineSum / kTimed, engineMax );
+			std::printf( "  %-15s %4dp  %9.2f %9.2f %9.2f %9.2f\n", MachineName( static_cast< Machine >( m ) ), size.second, gpuSum / kTimed,
+			             ms, engineSum / kTimed, engineMax );
 		}
-	std::printf( "\n  frame ms is the whole ProcessOpenGL, engine included, at 60 fps of synthetic clock\n" );
+	glDeleteQueries( 1, &query );
+	std::printf( "\n  GPU ms: GL_TIME_ELAPSED around ProcessOpenGL. frame ms: wall clock per frame, the engine and the query's\n"
+	             "  wait included. engine: the CPU engine's own time (Engine::LastMillis), mean and worst of 120 frames.\n" );
 	return 0;
 }
 
@@ -2077,7 +2096,7 @@ int main( int argc, char** argv )
 	else if( mode == "negative" )
 		result = runNegative();
 	else if( mode == "bench" )
-		result = runBench();
+		result = runBench( settings, machine );
 	else if( mode == "pipe" )
 		result = runPipe( width, height, effect, scriptPath, filmFrames, beat, settings );
 	else
