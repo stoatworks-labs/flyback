@@ -11,7 +11,11 @@
 // After FFGLSDK.h, which is where FFUInt32 comes from.
 #include "StoatworksAboutParams.h"
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 /**
@@ -39,6 +43,8 @@ class FlybackPlugin : public CFFGLPlugin
 {
 public:
 	explicit FlybackPlugin( bool overInput );
+
+	~FlybackPlugin() override;
 
 	FFResult InitGL( const FFGLViewportStruct* viewport ) override;
 	FFResult ProcessOpenGL( ProcessOpenGLStruct* input ) override;
@@ -68,17 +74,36 @@ public:
 	/// plugin vote on it against the wall clock: it renders hundreds of frames
 	/// a second, which the vote would read as milliseconds.
 	void SetClockScaleForTest( double scale );
+	/// The engine, idle: waits for any frame the worker is computing.
 	Engine& EngineForTest()
 	{
+		Wait();
 		return engine;
+	}
+
+	/// Run the engine inline, on the calling thread, in the frame it is for --
+	/// no worker, no frame of latency. The harness's physics-to-pixels checks
+	/// need the frame they rendered to be the one the engine just stepped.
+	void SetSynchronousForTest( bool on )
+	{
+		Wait();
+		synchronous = on;
 	}
 	Renderer& RendererForTest()
 	{
 		return renderer;
 	}
+	/// The engine's own time for its last completed step, ms, without waiting
+	/// for the one in flight.
+	double LastEngineMillisForTest() const
+	{
+		return lastEngineMillis.load();
+	}
+
+	/// The frame last rendered (in the worker mode, last frame's engine step).
 	const Frame& LastFrameForTest() const
 	{
-		return frame;
+		return synchronous ? frame : shown;
 	}
 	/// Columns the presets cover, in presets::Param order.
 	static const unsigned int* PresetColumnsForTest( int& count );
@@ -95,6 +120,45 @@ public:
 private:
 	void UpdateClock();
 	void Declare();
+
+	//-------------------------------------------------------------------
+	// The engine's worker thread.
+	//
+	// ProcessOpenGL for frame n waits for the engine step it started at
+	// frame n-1, renders that, and hands the worker frame n's step. The
+	// picture is one frame behind the clock, and the render thread only ever
+	// waits for whatever of the engine's time did not overlap the host's own
+	// work. The engine sees exactly the calls, in exactly the order, it sees
+	// synchronously -- which is why determinism survives the thread.
+	//-------------------------------------------------------------------
+	struct Job
+	{
+		Settings settings;
+		std::vector< uint8_t > clip;///< a copy: the render thread refills its own next frame
+		bool fire     = false;
+		double now    = 0.0;
+		double period = 1.0 / 60.0;
+		Renderer::Look look;
+	};
+	void RunJob( Job& job );
+	void Submit( Job&& job );
+	void Wait();
+	void StartWorker();
+	void StopWorker();
+	void WorkerLoop();
+
+	std::thread worker;
+	std::mutex jobMutex;
+	std::condition_variable jobSignal;
+	Job job;
+	bool busy        = false;
+	bool busyResult  = false;///< a finished step is waiting to be collected
+	bool quitting    = false;
+	bool synchronous = false;
+	Frame shown;
+	Renderer::Look shownLook;
+	bool haveShown = false;
+	std::atomic< double > lastEngineMillis { 0.0 };
 
 	const bool overInput;
 	float params[ PT_COUNT ] = {};

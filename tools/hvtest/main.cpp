@@ -66,6 +66,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -331,12 +332,16 @@ struct Rig
 			glDeleteTextures( 1, &clipTexture );
 	}
 
-	bool Init( int w, int h, bool over, const Floats* clip = nullptr )
+	/// `worker`: run the engine on the plugin's worker thread, one frame late,
+	/// as a host does. Off by default: the physics-to-pixels checks need the
+	/// frame they read to be the step the engine just took.
+	bool Init( int w, int h, bool over, const Floats* clip = nullptr, bool worker = false )
 	{
 		width  = w;
 		height = h;
 		effect = over;
 		plugin = std::make_unique< FlybackPlugin >( over );
+		plugin->SetSynchronousForTest( !worker );
 		FFGLViewportStruct viewport = {};
 		viewport.width              = static_cast< FFUInt32 >( w );
 		viewport.height             = static_cast< FFUInt32 >( h );
@@ -1406,23 +1411,39 @@ int runExposure( const Perturb& perturb )
 //===========================================================================
 int runDeterminism( const Perturb& perturb )
 {
-	std::printf( "\n=== determinism: the same seed renders the same frames\n" );
+	std::printf( "\n=== determinism: the same seed renders the same frames, on the worker thread too\n" );
 	for( int m : { 1, 0, 3 } )
 	{
-		auto film = [ & ]( float seed ) {
+		// Every frame of the film, not just the last: the worker's frames are
+		// compared with the synchronous ones one frame earlier.
+		auto film = [ & ]( float seed, bool worker ) {
 			Rig rig;
-			rig.Init( 480, 270, false );
+			rig.Init( 480, 270, false, nullptr, worker );
 			rig.Set( PT_MACHINE, static_cast< float >( m ) );
 			rig.Set( PT_SEED, seed );
-			rig.Render( 90 );
-			return rig.Output();
+			std::vector< Bytes > frames;
+			for( int i = 0; i < 90; ++i )
+			{
+				rig.Render( 1 );
+				frames.push_back( rig.Output() );
+			}
+			return frames;
 		};
-		const Bytes a = film( 0.3f ), b = film( 0.3f ), c = film( 0.7f );
+		const auto a = film( 0.3f, false ), b = film( 0.3f, false ), c = film( 0.7f, false );
 		const bool same    = a == b;
-		const bool differs = a != c;
+		const bool differs = a.back() != c.back();
 		Check( same && ( perturb.sameForOtherSeed ? !differs : differs ),
 		       fmt( "%-15s 90 frames twice with seed 0.3: %s; with seed 0.7: %s", MachineName( static_cast< Machine >( m ) ),
 		            same ? "bit-identical" : "DIFFERENT", differs ? "different" : "IDENTICAL" ) );
+		const auto w1 = film( 0.3f, true ), w2 = film( 0.3f, true );
+		int lagged = 0;
+		for( size_t i = 1; i < w1.size(); ++i )
+			if( w1[ i ] == a[ i - 1 ] )
+				++lagged;
+		Check( w1 == w2 && lagged == static_cast< int >( w1.size() ) - 1,
+		       fmt( "%-15s on the worker thread: twice bit-identical (%s), and each frame is the synchronous frame before it, "
+		            "bit for bit (%d of %zu)",
+		            MachineName( static_cast< Machine >( m ) ), w1 == w2 ? "yes" : "NO", lagged, w1.size() - 1 ) );
 	}
 	return Verdict();
 }
@@ -1756,7 +1777,8 @@ int runBench( const std::vector< std::string >& settings, int only )
 	double load[ 3 ] = {};
 	getloadavg( load, 3 );
 	std::printf( "  load average %.1f %.1f %.1f\n\n", load[ 0 ], load[ 1 ], load[ 2 ] );
-	std::printf( "  %-15s %-6s %9s %9s %9s %9s\n", "machine", "size", "GPU ms", "frame ms", "engine ms", "engine max" );
+	std::printf( "  %-15s %-6s %8s %8s %8s %8s %8s\n", "machine", "size", "GPU ms", "render", "render", "engine", "engine" );
+	std::printf( "  %-15s %-6s %8s %8s %8s %8s %8s\n", "", "", "mean", "mean", "worst", "mean", "worst" );
 	GLuint query = 0;
 	glGenQueries( 1, &query );
 	for( int m = 0; m < static_cast< int >( Machine::Count ); ++m )
@@ -1765,7 +1787,7 @@ int runBench( const std::vector< std::string >& settings, int only )
 			if( only >= 0 && m != only )
 				continue;
 			Rig rig;
-			if( !rig.Init( size.first, size.second, false ) )
+			if( !rig.Init( size.first, size.second, false, nullptr, true ) )
 				return 1;
 			rig.Set( PT_MACHINE, static_cast< float >( m ) );
 			for( const std::string& setting : settings )
@@ -1776,31 +1798,38 @@ int runBench( const std::vector< std::string >& settings, int only )
 			}
 			rig.Render( 90 );
 			glFinish();
-			constexpr int kTimed = 120;
-			double engineSum = 0.0, engineMax = 0.0, gpuSum = 0.0;
-			const auto start = std::chrono::steady_clock::now();
+			constexpr int kTimed = 180;
+			double engineSum = 0.0, engineMax = 0.0, gpuSum = 0.0, renderSum = 0.0, renderMax = 0.0;
+			auto tick = std::chrono::steady_clock::now();
 			for( int i = 0; i < kTimed; ++i )
 			{
-				// The GPU's own clock around the whole ProcessOpenGL: what the
-				// passes cost the GPU, whatever the CPU was doing.
+				// Paced like a host at 60 fps: the worker's engine step for this
+				// frame runs while the "host" waits for the next tick, which is
+				// the overlap the thread exists for. What the host pays is the
+				// render thread's time in ProcessOpenGL.
+				tick += std::chrono::microseconds( 16667 );
+				const auto start = std::chrono::steady_clock::now();
 				glBeginQuery( GL_TIME_ELAPSED, query );
 				rig.Render( 1 );
 				glEndQuery( GL_TIME_ELAPSED );
+				const double render = std::chrono::duration< double, std::milli >( std::chrono::steady_clock::now() - start ).count();
 				GLuint64 ns = 0;
 				glGetQueryObjectui64v( query, GL_QUERY_RESULT, &ns );
 				gpuSum += static_cast< double >( ns ) * 1e-6;
-				const double e = rig.plugin->EngineForTest().LastMillis();
+				renderSum += render;
+				renderMax = std::max( renderMax, render );
+				const double e = rig.plugin->LastEngineMillisForTest();
 				engineSum += e;
 				engineMax = std::max( engineMax, e );
+				std::this_thread::sleep_until( tick );
 			}
-			glFinish();
-			const double ms = std::chrono::duration< double, std::milli >( std::chrono::steady_clock::now() - start ).count() / kTimed;
-			std::printf( "  %-15s %4dp  %9.2f %9.2f %9.2f %9.2f\n", MachineName( static_cast< Machine >( m ) ), size.second, gpuSum / kTimed,
-			             ms, engineSum / kTimed, engineMax );
+			std::printf( "  %-15s %4dp  %8.2f %8.2f %8.2f %8.2f %8.2f\n", MachineName( static_cast< Machine >( m ) ), size.second,
+			             gpuSum / kTimed, renderSum / kTimed, renderMax, engineSum / kTimed, engineMax );
 		}
 	glDeleteQueries( 1, &query );
-	std::printf( "\n  GPU ms: GL_TIME_ELAPSED around ProcessOpenGL. frame ms: wall clock per frame, the engine and the query's\n"
-	             "  wait included. engine: the CPU engine's own time (Engine::LastMillis), mean and worst of 120 frames.\n" );
+	std::printf( "\n  GPU: GL_TIME_ELAPSED around ProcessOpenGL. render: the host thread's wall time in ProcessOpenGL,\n"
+	             "  engine on its worker thread, paced at 60 fps (it includes waiting for the GPU query). engine: the\n"
+	             "  worker's own time per step. 180 frames each.\n" );
 	return 0;
 }
 

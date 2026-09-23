@@ -375,6 +375,10 @@ FFResult FlybackPlugin::InitGL( const FFGLViewportStruct* viewport )
 
 FFResult FlybackPlugin::DeInitGL()
 {
+	StopWorker();
+	busy       = false;
+	busyResult = false;
+	haveShown  = false;
 	renderer.DeInitGL();
 	rendererReady = false;
 	return FF_SUCCESS;
@@ -457,16 +461,121 @@ FFResult FlybackPlugin::ProcessOpenGL( ProcessOpenGLStruct* input )
 		}
 	}
 
-	engine.Configure( r.engine );
-	if( firePending || ( r.audioFires > 0.0f && analyser.Fired() ) )
-		engine.Fire();
-	firePending = false;
-	engine.Advance( now, period, frame );
-
-	r.look.decay = r.persistenceSeconds > 0.0f ? static_cast< float >( std::exp( -period / r.persistenceSeconds ) ) : 0.0f;
+	r.look.decay        = r.persistenceSeconds > 0.0f ? static_cast< float >( std::exp( -period / r.persistenceSeconds ) ) : 0.0f;
 	r.look.clearHistory = jumped;
-	if( !renderer.Render( frame, r.look, input->HostFBO, viewport, clip, maxU, maxV ) )
-		return FF_FAIL;
-	return FF_SUCCESS;
+
+	Job next;
+	next.settings = r.engine;
+	if( r.engine.clip != nullptr )
+		next.clip = *r.engine.clip;
+	next.fire   = firePending || ( r.audioFires > 0.0f && analyser.Fired() );
+	next.now    = now;
+	next.period = period;
+	next.look   = r.look;
+	firePending = false;
+
+	if( synchronous )
+	{
+		RunJob( next );
+		return renderer.Render( frame, next.look, input->HostFBO, viewport, clip, maxU, maxV ) ? FF_SUCCESS : FF_FAIL;
+	}
+
+	// Last frame's step is (nearly always) done by now: collect it, start this
+	// frame's, and draw the one collected.
+	Wait();
+	if( busyResult )
+	{
+		std::swap( frame, shown );
+		shownLook = job.look;
+		haveShown = true;
+		busyResult = false;
+	}
+	if( !worker.joinable() )
+		StartWorker();
+	Submit( std::move( next ) );
+
+	if( !haveShown )
+	{
+		// The very first frame: nothing has been computed yet. The apparatus
+		// with no light on it, rather than a black frame.
+		Frame empty;
+		return renderer.Render( empty, r.look, input->HostFBO, viewport, clip, maxU, maxV ) ? FF_SUCCESS : FF_FAIL;
+	}
+	// The look travels with its frame, except where it is the clip's: this
+	// frame's clip is what the effect is drawn over.
+	return renderer.Render( shown, shownLook, input->HostFBO, viewport, clip, maxU, maxV ) ? FF_SUCCESS : FF_FAIL;
 }
+
+//---------------------------------------------------------------------------
+// The worker.
+//---------------------------------------------------------------------------
+void FlybackPlugin::RunJob( Job& j )
+{
+	if( !j.clip.empty() )
+		j.settings.clip = &j.clip;
+	else
+		j.settings.clip = nullptr;
+	engine.Configure( j.settings );
+	if( j.fire )
+		engine.Fire();
+	engine.Advance( j.now, j.period, frame );
+	lastEngineMillis.store( engine.LastMillis() );
+}
+
+void FlybackPlugin::StartWorker()
+{
+	quitting = false;
+	worker   = std::thread( [ this ] { WorkerLoop(); } );
+}
+
+void FlybackPlugin::StopWorker()
+{
+	if( !worker.joinable() )
+		return;
+	{
+		std::lock_guard< std::mutex > lock( jobMutex );
+		quitting = true;
+	}
+	jobSignal.notify_all();
+	worker.join();
+}
+
+void FlybackPlugin::Submit( Job&& next )
+{
+	{
+		std::lock_guard< std::mutex > lock( jobMutex );
+		job  = std::move( next );
+		busy = true;
+	}
+	jobSignal.notify_all();
+}
+
+void FlybackPlugin::Wait()
+{
+	std::unique_lock< std::mutex > lock( jobMutex );
+	jobSignal.wait( lock, [ this ] { return !busy; } );
+}
+
+void FlybackPlugin::WorkerLoop()
+{
+	std::unique_lock< std::mutex > lock( jobMutex );
+	for( ;; )
+	{
+		jobSignal.wait( lock, [ this ] { return busy || quitting; } );
+		if( quitting )
+			return;
+		lock.unlock();
+		RunJob( job );
+		lock.lock();
+		busy       = false;
+		busyResult = true;
+		jobSignal.notify_all();
+	}
+}
+
+FlybackPlugin::~FlybackPlugin()
+{
+	StopWorker();
+}
+
 } // namespace flyback
