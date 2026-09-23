@@ -872,7 +872,29 @@ int runLadder( const Perturb& perturb )
 	Settings s = MachineSettings( Machine::Ladder );
 	physics::Ayrton ayrton;
 	ayrton.D *= perturb.ayrtonD;
-	const double lStar = physics::ExtinctionLength( ayrton, s.supply );
+	// L*, found here by bisection on the discriminant of the load line
+	// against Ayrton's equation, written out afresh:
+	//   V_oc - I R_s = A + B L + (C + D L) / I  has a real I  iff
+	//   (V_oc - A - B L)^2 >= 4 R_s (C + D L).
+	// Not the engine's closed form: the mutation test showed that comparing
+	// the engine with its own function catches nothing wrong in the function.
+	auto arcExists = [ & ]( const physics::Supply& supply, double L ) {
+		const double b = supply.openVolts - ayrton.A - ayrton.B * L;
+		return b > 0.0 && b * b >= 4.0 * supply.sourceOhms * ( ayrton.C + ayrton.D * L );
+	};
+	auto bisect = [ & ]( const physics::Supply& supply ) {
+		double lo = 0.0, hi = 10.0;
+		for( int k = 0; k < 200; ++k )
+		{
+			const double mid = 0.5 * ( lo + hi );
+			( arcExists( supply, mid ) ? lo : hi ) = mid;
+		}
+		return lo;
+	};
+	const double lStar = bisect( s.supply );
+	Check( std::fabs( lStar - physics::ExtinctionLength( physics::Ayrton(), s.supply ) ) <= 1e-9,
+	       fmt( "the closed form agrees with bisection on the discriminant: %.9f m against %.9f m", physics::ExtinctionLength( physics::Ayrton(), s.supply ),
+	            lStar ) );
 	const double h     = physics::kAirBreakdown > 0.0 ? SceneHeight( Machine::Ladder ) / s.cellsHigh : 0.0;
 	const double rise  = s.rise * perturb.riseScale;
 	Note( fmt( "supply %.1f kV behind %.2f MOhm: closed-form L* = %.4f m; strike gap %.2f mm; lattice step %.2f mm",
@@ -996,7 +1018,7 @@ int runLadder( const Perturb& perturb )
 	{
 		Settings soft = s;
 		soft.supply.sourceOhms *= 2.0;
-		const double lSoft = physics::ExtinctionLength( ayrton, soft.supply );
+		const double lSoft = bisect( soft.supply );
 		Check( lSoft < lStar, fmt( "R_s doubled: L* %.4f m < %.4f m", lSoft, lStar ) );
 		Engine engine;
 		engine.Ladder().rootSpeed = 1.0;
@@ -1087,23 +1109,69 @@ int runVdg( const Perturb& perturb )
 {
 	std::printf( "\n=== vdg: the belt charges the sphere until the gap breaks\n" );
 	// The breakdown model, stated: the two-sphere field by images, Peek's
-	// sphere field. First the image series against its own limits.
+	// sphere field. The image charges are not trusted: they are checked
+	// against the boundary conditions -- the driven sphere's surface at 1 V,
+	// the grounded one's at 0, everywhere -- and by uniqueness a set that
+	// meets them IS the solution. C, the facing fields and V_b are then worked
+	// out here from those charges, and Peek's law is written out afresh.
+	const double k0 = 4.0 * kPi * physics::kEpsilon0;
+	auto peek = []( double r ) { return 27.2e5 * ( 1.0 + 0.54 / std::sqrt( r * 100.0 ) ); };// V/m, r in m
+	struct Expect
+	{
+		double C, Vb;
+		bool ok;
+		double worst;
+	};
+	auto expect = [ & ]( double a, double gap ) {
+		const double b = physics::kVdgGroundRatio * a;
+		const double sep = a + gap + b;
+		const physics::TwoSpheres ts = physics::SolveTwoSpheres( a, b, gap );
+		double worst = 0.0;
+		for( int n = 0; n < 64; ++n )
+		{
+			const double th = kPi * n / 63.0;
+			for( int sphere = 0; sphere < 2; ++sphere )
+			{
+				const double R  = sphere == 0 ? a : b;
+				const double cx = sphere == 0 ? 0.0 : sep;
+				const double px = cx + R * std::cos( th ), py = R * std::sin( th );
+				double v = 0.0;
+				for( const auto& q : ts.charges )
+					v += q.first / ( k0 * std::hypot( px - q.second, py ) );
+				worst = std::max( worst, std::fabs( v - ( sphere == 0 ? 1.0 : 0.0 ) ) );
+			}
+		}
+		double C = 0.0, ea = 0.0, eb = 0.0;
+		for( const auto& q : ts.charges )
+		{
+			if( q.second < a )
+				C += q.first;
+			const double da = a - q.second, db = ( sep - b ) - q.second;
+			ea += q.first / ( k0 * da * std::fabs( da ) );
+			eb += q.first / ( k0 * db * std::fabs( db ) );
+		}
+		double vb = std::min( peek( a ) / std::fabs( ea ), peek( b ) / std::fabs( eb ) );
+		if( perturb.uniformBreakdown )
+			vb = physics::kAirBreakdown * gap;
+		return Expect { C, vb, worst < 1e-9, worst };
+	};
 	{
 		const double a = 0.12;
 		const physics::TwoSpheres far = physics::SolveTwoSpheres( a, 0.4 * a, 1e4 );
-		const double c0              = 4.0 * physics::kPi * physics::kEpsilon0 * a;
-		Check( std::fabs( far.capacitance / c0 - 1.0 ) < 1e-3 && std::fabs( far.fieldDriven * a - 1.0 ) < 1e-3,
-		       fmt( "images: a sphere alone has C = 4 pi eps0 a (%.5f of it) and E = V/a (%.5f of it)", far.capacitance / c0,
+		Check( std::fabs( far.capacitance / ( k0 * a ) - 1.0 ) < 1e-3 && std::fabs( far.fieldDriven * a - 1.0 ) < 1e-3,
+		       fmt( "images: a sphere alone has C = 4 pi eps0 a (%.5f of it) and E = V/a (%.5f of it)", far.capacitance / ( k0 * a ),
 		            far.fieldDriven * a ) );
 	}
 	auto interval = [ & ]( const Settings& s ) {
-		const double b = physics::kVdgGroundRatio * s.sphere;
-		const physics::TwoSpheres ts = physics::SolveTwoSpheres( s.sphere, b, s.gap );
-		double vb                    = physics::VdgBreakdownVolts( ts, s.sphere, b );
-		if( perturb.uniformBreakdown )
-			vb = physics::kAirBreakdown * s.gap;
-		return ts.capacitance * vb / s.belt;
+		const Expect e = expect( s.sphere, s.gap );
+		return e.C * e.Vb / s.belt;
 	};
+	{
+		const Settings s = MachineSettings( Machine::VanDeGraaff );
+		const Expect e   = expect( s.sphere, s.gap );
+		Check( e.ok, fmt( "the %zu image charges hold both spheres at their potentials to %.1e V at 128 surface points",
+		                  physics::SolveTwoSpheres( s.sphere, physics::kVdgGroundRatio * s.sphere, s.gap ).charges.size(), e.worst ) );
+	}
 
 	double first = 0.0;
 	for( double belt : { 10e-6, 5e-6 } )

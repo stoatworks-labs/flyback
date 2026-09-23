@@ -110,6 +110,8 @@ TwoSpheres SolveTwoSpheres( double a, double b, double gap )
 		ea += c.q * da / ( std::fabs( da ) * da * da );
 		eb += c.q * db / ( std::fabs( db ) * db * db );
 	}
+	for( const Charge& c : charges )
+		out.charges.push_back( { c.q, c.x } );
 	out.capacitance   = inDriven;
 	out.fieldDriven   = std::fabs( ea ) / k;
 	out.fieldGrounded = std::fabs( eb ) / k;

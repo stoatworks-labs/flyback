@@ -11,6 +11,9 @@
 
     SI units throughout: metres, seconds, volts, amperes, farads, joules.
 */
+#include <utility>
+#include <vector>
+
 namespace flyback::physics
 {
 constexpr double kPi       = 3.14159265358979323846;
@@ -142,6 +145,10 @@ struct TwoSpheres
 	double fieldDriven    = 0.0;///< V/m per volt at the driven sphere's facing point
 	double fieldGrounded  = 0.0;///< V/m per volt at the grounded sphere's facing point
 	int images            = 0;
+	/// Every charge in the series, (coulombs per volt, x along the axis from
+	/// the driven sphere's centre). For `hvtest --vdg`, which checks them
+	/// against the boundary conditions rather than trusting this code.
+	std::vector< std::pair< double, double > > charges;
 };
 TwoSpheres SolveTwoSpheres( double a, double b, double gap );
 
