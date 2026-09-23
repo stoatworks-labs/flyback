@@ -20,7 +20,7 @@
 180  Preset    2
 359  Preset    2
 
-# 6-9 s: the Van de Graaff: corona, then a spark every C V_b / I. Fired once
+# 6-9 s: the Van de Graaff, polished: no corona, a spark every C V_b / I. Fired once
 # more by hand at 7.5 s.
 360  Preset    3
 449  Fire      0

@@ -1059,9 +1059,25 @@ public:
 	static constexpr double kBaseY        = -0.28;
 	static constexpr double kSparkSeconds = 1e-6;///< a spark's current pulse
 	static constexpr double kGroundWeight = 20.0;
-	/// A tenth of the belt's power goes into corona glow. Drawn, and NOT
-	/// charged against the belt: the interval stays C V_b / I_belt.
-	static constexpr double kCoronaShare = 0.1;
+	/// The charging ODE's step. Backward Euler: exact for the belt alone (the
+	/// voltage is linear in time), unconditionally stable against the corona's
+	/// sub-millisecond time constant C / G.
+	static constexpr double kSubstep = Engine::kVdgSubstep;
+
+	/// The room's ground, for the corona current: the distance from the
+	/// sphere's centre to the grounded base plate.
+	double GroundDistance() const
+	{
+		return kCentreY - kBaseY;
+	}
+	double CoronaOnset() const
+	{
+		return std::clamp( s.finish, kRoughestFinish, 1.0 ) * breakdown;
+	}
+	double Conductance() const
+	{
+		return CoronaConductance( s.sphere, CoronaOnset(), GroundDistance() );
+	}
 
 	double B() const
 	{
@@ -1121,14 +1137,9 @@ public:
 		breakdown = VdgBreakdownVolts( spheres, s.sphere, B() );
 	}
 
-	double Interval() const
-	{
-		return spheres.capacitance * breakdown / std::max( s.belt, 1e-12 );
-	}
-
 	void Restart( double t ) override
 	{
-		charge   = 0.0;
+		volts    = 0.0;
 		lastTime = t;
 		tree.Clear();
 		corona.Clear();
@@ -1140,7 +1151,7 @@ public:
 		fire = true;
 	}
 
-	void Spark( double t, double volts, bool exposed, int frame, Frame& out, std::vector< Event >& log )
+	void Spark( double t, double v, bool exposed, int frame, Frame& out, std::vector< Event >& log )
 	{
 		tree.Clear();
 		field.Adopt( tree );
@@ -1149,7 +1160,7 @@ public:
 		field.Grow( tree, 4000, kHuge, rng, t, g );
 		Event e;
 		e.time      = t;
-		e.joules    = 0.5 * spheres.capacitance * volts * volts;
+		e.joules    = 0.5 * spheres.capacitance * v * v;
 		e.connected = tree.Connected();
 		e.exposed   = exposed;
 		e.frame     = exposed ? frame : -1;
@@ -1161,7 +1172,7 @@ public:
 				++e.branches;
 		if( exposed )
 		{
-			Emit( tree, spheres.capacitance * volts / kSparkSeconds, kGroundWeight, e.joules * s.efficiency, out );
+			Emit( tree, spheres.capacitance * v / kSparkSeconds, kGroundWeight, e.joules * s.efficiency, out );
 			e.light = e.joules * s.efficiency;
 			++out.events;
 		}
@@ -1171,43 +1182,68 @@ public:
 		for( const Node& n : tree.Nodes() )
 			field.Forget( n );
 		tree.Clear();
-		charge = 0.0;
+		volts = 0.0;
 	}
 
+	/// The charging ODE,
+	///
+	///     C dV/dt = I_belt - G (V - V_c)   for V > V_c,   I_belt below it,
+	///
+	/// integrated here by backward Euler; `hvtest --vdg` holds it to the
+	/// closed form. A polished sphere has V_c = V_b -- its corona onset IS the
+	/// gap's breakdown, both being Peek's field at the facing point -- so the
+	/// corona term never acts and the interval is C V_b / I exactly. A rough
+	/// one coronas first, and since G is tens of nA per volt against a belt of
+	/// microamps, the corona does not slow the climb so much as stop it: the
+	/// sphere settles at V_c + I_belt / G within a millisecond. If that is
+	/// below V_b it never sparks and glows instead.
 	void Step( double t0, double t1, double exposeFrom, int frame, Frame& out, std::vector< Event >& log ) override
 	{
-		const double C = spheres.capacitance;
-		double t       = t0;
-		// Belt charge is exact: dQ/dt = I, so the spark times are too.
-		for( ;; )
+		const double C  = spheres.capacitance;
+		const double Vc = CoronaOnset();
+		const double G  = Conductance();
+		const double I  = std::max( s.belt, 0.0 );
+		double coronaJoules = 0.0;
+		double t            = t0;
+		while( t < t1 - 1e-12 )
 		{
-			const double toBreak = ( C * breakdown - charge ) / std::max( s.belt, 1e-12 );
-			if( t + toBreak > t1 )
-				break;
-			t += toBreak;
-			Spark( t, breakdown, t > exposeFrom, frame, out, log );
+			const double dt = std::min( kSubstep, t1 - t );
+			double v        = volts + I * dt / C;
+			if( v > Vc && Vc < breakdown && G > 0.0 )
+				v = ( volts + dt / C * ( I + G * Vc ) ) / ( 1.0 + dt * G / C );
+			if( v >= breakdown && v > volts )
+			{
+				// When in the step, linearly: exact for the belt alone.
+				const double f  = ( breakdown - volts ) / ( v - volts );
+				const double ts = t + f * dt;
+				Spark( ts, breakdown, ts > exposeFrom, frame, out, log );
+				volts = 0.0;
+				t     = ts;
+				continue;
+			}
+			const double ic = G * std::max( 0.0, v - Vc );
+			coronaJoules += v * ic * Exposed( t, t + dt, exposeFrom );
+			volts = v;
+			t += dt;
 		}
-		charge += s.belt * ( t1 - t );
+		coronaAmps = G * std::max( 0.0, volts - Vc );
 		if( fire )
 		{
 			fire = false;
-			const double v = charge / C;
-			if( v > 0.2 * breakdown )
-				Spark( t1, v, true, frame, out, log );
+			if( volts > 0.2 * breakdown )
+				Spark( t1, volts, true, frame, out, log );
 		}
 
-		// Corona: a tuft of eta = 1 growth, fresh each frame, as the sphere
-		// nears breakdown.
-		const double v     = charge / C;
-		const double ratio = std::clamp( v / breakdown, 0.0, 1.0 );
-		const int sites    = static_cast< int >( std::lround( 28.0 * s.reach * ratio * ratio * ratio ) );
+		// Corona: a tuft of eta = 1 growth, fresh each frame, as large as the
+		// share of the belt's current it carries, and emitting exactly the power
+		// it drained, V I_c, times the efficiency.
+		const int sites = static_cast< int >( std::lround( 28.0 * s.reach * std::min( 1.0, coronaAmps / std::max( I, 1e-12 ) ) ) );
 		corona.Clear();
 		if( sites > 0 )
 		{
 			GrowthSettings g = Growth( 1.0, true );
 			field.Grow( corona, sites, kHuge, rng, t1, g );
-			const double power = kCoronaShare * v * s.belt;
-			Emit( corona, s.belt, kGroundWeight, power * Exposed( t0, t1, exposeFrom ) * s.efficiency, out );
+			Emit( corona, coronaAmps, kGroundWeight, coronaJoules * s.efficiency, out );
 			for( const Node& n : corona.Nodes() )
 				field.Forget( n );
 		}
@@ -1228,8 +1264,9 @@ public:
 	}
 
 	TwoSpheres spheres;
-	double breakdown = 1.0;
-	double charge    = 0.0;
+	double breakdown  = 1.0;
+	double volts      = 0.0;
+	double coronaAmps = 0.0;
 	double lastTime  = 0.0;
 	bool fire        = false;
 	Tree corona;
@@ -1683,6 +1720,34 @@ double Engine::VdgBreakdown() const
 double Engine::VdgCapacitance() const
 {
 	return static_cast< const VdgMachine& >( *impl->machines[ static_cast< int >( Machine::VanDeGraaff ) ] ).spheres.capacitance;
+}
+
+namespace
+{
+const VdgMachine& Vdg( const std::unique_ptr< MachineBase >* machines )
+{
+	return static_cast< const VdgMachine& >( *machines[ static_cast< int >( Machine::VanDeGraaff ) ] );
+}
+} // namespace
+
+double Engine::VdgVolts() const
+{
+	return Vdg( impl->machines ).volts;
+}
+
+double Engine::VdgCoronaOnset() const
+{
+	return Vdg( impl->machines ).CoronaOnset();
+}
+
+double Engine::VdgConductance() const
+{
+	return Vdg( impl->machines ).Conductance();
+}
+
+double Engine::VdgGroundDistance() const
+{
+	return Vdg( impl->machines ).GroundDistance();
 }
 
 double Engine::TeslaBangJoules() const

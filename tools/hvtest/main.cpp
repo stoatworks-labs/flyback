@@ -127,6 +127,7 @@ struct Perturb
 	double riseScale      = 1.0;  ///< --ladder expects the arc to climb this much faster
 	double extraBangs     = 0.0;  ///< --tesla expects this many more bangs in the minute
 	double memorySeconds  = -1.0; ///< --tesla runs its memory claim with this tau
+	bool noCorona         = false;///< --vdg expects the corona-free C V_b / I from a rough sphere too
 	bool uniformBreakdown = false;///< --vdg expects V_b = 3 MV/m x gap, no enhancement, no Peek
 	bool splitCurrents    = false;///< --kirchhoff checks a tree whose every node carries its root's current
 	bool lightPerBranch   = false;///< --light expects the light to scale with the number of branches
@@ -1195,8 +1196,11 @@ int runVdg( const Perturb& perturb )
 		double worst = 0.0;
 		for( size_t k = 1; k < ev.size(); ++k )
 			worst = std::max( worst, std::fabs( ( ev[ k ].time - ev[ k - 1 ].time ) - T ) );
-		Check( ev.size() >= 10 && worst <= 1.0 / kFps,
-		       fmt( "%.0f uA: %zu sparks, every interval C V_b / I = %.4f s to one frame (worst %.3g s off; V_b %.1f kV, C %.2f pF)",
+		// Polished, no corona: the belt alone charges it linearly, which the
+		// step integrates exactly, so only double rounding on t (35k steps of
+		// 1e-5 s at 2^-53 each) separates the intervals from C V_b / I.
+		Check( ev.size() >= 10 && worst <= 1e-9,
+		       fmt( "%.0f uA: %zu sparks, every interval C V_b / I = %.4f s to 1e-9 s (worst %.3g s off; V_b %.1f kV, C %.2f pF)",
 		            belt * 1e6, ev.size(), T, worst, engine.VdgBreakdown() / 1000.0, engine.VdgCapacitance() * 1e12 ) );
 		// And as a camera sees them: the frames they land in.
 		int onFrame = 0;
@@ -1213,6 +1217,78 @@ int runVdg( const Perturb& perturb )
 			Check( std::fabs( second - 2.0 * first ) <= 1.0 / kFps,
 			       fmt( "half the belt current, twice the interval: %.4f s against %.4f s", second, 2.0 * first ) );
 		}
+	}
+
+	// Corona. Past onset V_c = m V_b a sphere leaks I_c = G (V - V_c) to the
+	// room, so C dV/dt = I - G (V - V_c). Its closed form, from here:
+	//   t_c = C V_c / I, then V = V_inf - (V_inf - V_c) exp(-(t - t_c) G / C),
+	//   V_inf = V_c + I / G.
+	// V_inf > V_b: it sparks at T = t_c + (C/G) ln((V_inf - V_c)/(V_inf - V_b)).
+	// V_inf < V_b: it never sparks and holds at V_inf.
+	// G is written out afresh (24 pi eps0 mu a V_c / b^2; mu = 1.76 cm^2/Vs, the
+	// positive ion's, as AGENTS.md cites it) from the harness's own V_b.
+	auto conductance = [ & ]( double a, double vc, double b ) {
+		return 24.0 * kPi * physics::kEpsilon0 * 1.76e-4 * a * vc / ( b * b );
+	};
+	{
+		// The window where it both glows and sparks is narrow: V_b - V_c under
+		// I / G, a few hundred volts in 190 kV. Put the sphere 80% of the way
+		// across it, where the corona's delay is largest against the tolerance.
+		Settings s = MachineSettings( Machine::VanDeGraaff );
+		const Expect e = expect( s.sphere, s.gap );
+		Engine probe;
+		probe.Configure( s );
+		const double b = probe.VdgGroundDistance();
+		double m       = 1.0;
+		for( int k = 0; k < 8; ++k )
+			m = 1.0 - 0.8 * s.belt / ( conductance( s.sphere, m * e.Vb, b ) * e.Vb );
+		s.finish        = m;
+		const double Vc = m * e.Vb, G = conductance( s.sphere, Vc, b ), I = s.belt;
+		const double Vinf = Vc + I / G, tau = e.C / G;
+		double T = e.C * Vc / I + tau * std::log( ( Vinf - Vc ) / ( Vinf - e.Vb ) );
+		const double bare = e.C * e.Vb / I;
+		if( perturb.noCorona )
+			T = bare;
+		// Backward Euler's error, bounded: on y' = -y / tau its global error in
+		// V is at most (dt / 2 tau) (V_inf - V_c) max(x e^-x) = (dt / 2e tau)
+		// (V_inf - V_c), a time error of that over the slope at the crossing,
+		// (V_inf - V_b) / tau. The step that straddles V_c drains at most
+		// G (I dt / C) dt / C, dt^2 / tau in time; the linear read of the
+		// crossing inside its step, dt^2 / 8 tau. Plus double rounding on t.
+		const double dt  = Engine::kVdgSubstep;
+		const double tol = dt / ( 2.0 * std::exp( 1.0 ) ) * ( Vinf - Vc ) / ( Vinf - e.Vb ) + 1.125 * dt * dt / tau + 1e-9;
+		Engine engine;
+		Frame frame;
+		RunEngine( engine, s, 6.0, frame, 0.0, []( int ) {} );
+		const std::vector< Event >& ev = engine.Events();
+		double worst = 0.0;
+		for( size_t k = 1; k < ev.size(); ++k )
+			worst = std::max( worst, std::fabs( ( ev[ k ].time - ev[ k - 1 ].time ) - T ) );
+		Check( ev.size() >= 10 && worst <= tol,
+		       fmt( "m %.6f (V_b - V_c = %.0f V, I/G = %.0f V, C/G = %.3f ms): %zu sparks, every interval the ODE's %.6f s to %.2g s "
+		            "(bound %.2g; corona-free would be %.6f)",
+		            m, e.Vb - Vc, I / G, tau * 1e3, ev.size(), T, worst, tol, bare ) );
+		Check( std::fabs( T - bare ) > 3.0 * tol,
+		       fmt( "and the check can tell: the corona moves the interval %.3g s, %.0f times its bound", T - bare, std::fabs( T - bare ) / tol ) );
+	}
+	for( double finish : { 0.95, physics::kRoughestFinish } )
+	{
+		// Rough: V_inf < V_b, so no sparks, and the sphere sits at V_inf with
+		// the corona carrying the whole belt. Backward Euler's fixed point IS
+		// the ODE's, so only rounding separates them.
+		Settings s     = MachineSettings( Machine::VanDeGraaff );
+		s.finish       = finish;
+		const Expect e = expect( s.sphere, s.gap );
+		Engine engine;
+		Frame frame;
+		RunEngine( engine, s, 2.0, frame, 0.0, []( int ) {} );
+		const double Vc = finish * e.Vb, G = conductance( s.sphere, Vc, engine.VdgGroundDistance() );
+		const double Vinf     = perturb.noCorona ? e.Vb : Vc + s.belt / G;
+		const size_t expected = perturb.noCorona ? static_cast< size_t >( 2.0 / ( e.C * e.Vb / s.belt ) ) : 0;
+		const double over     = engine.VdgVolts() - Vc, want = Vinf - Vc;
+		Check( engine.Events().size() == expected && std::fabs( over - want ) <= 1e-9 * e.Vb,
+		       fmt( "m %.2f: %zu sparks in 2 s, held at V_c + %.2f V against I/G = %.2f V (V_c %.1f kV under V_b %.1f kV)", finish,
+		            engine.Events().size(), over, want, Vc / 1000.0, e.Vb / 1000.0 ) );
 	}
 	return Verdict();
 }
@@ -1738,6 +1814,7 @@ int runNegative()
 	add( "tesla", runTesla, []( Perturb& p ) { p.extraBangs = 1.0; }, "expect one bang more in the minute" );
 	add( "tesla", runTesla, []( Perturb& p ) { p.memorySeconds = 1e-5; }, "a coil with no channel memory" );
 	add( "vdg", runVdg, []( Perturb& p ) { p.uniformBreakdown = true; }, "expect V_b = 3 MV/m x gap: no images, no Peek" );
+	add( "vdg", runVdg, []( Perturb& p ) { p.noCorona = true; }, "expect a rough sphere to charge as if it had no corona" );
 	add( "kirchhoff", runKirchhoff, []( Perturb& p ) { p.splitCurrents = true; }, "every node carries its root's current" );
 	add( "light", runLight, []( Perturb& p ) { p.lightPerBranch = true; }, "expect the light to scale with the branches" );
 	add( "exposure", runExposure, []( Perturb& p ) { p.halfShutterAll = true; }, "expect every bang seen at 180 degrees too" );

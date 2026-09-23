@@ -64,8 +64,12 @@ the air breaks and *how much energy* the channel carries:
 - **Van de Graaff.** The belt charges the sphere at I_belt. The gap breaks when
   its surface field reaches Peek's value, from the two-sphere image-charge
   solution, and the spark dumps ½CV². So sparks come every **C·V_b/I_belt**,
-  twice as often at twice the belt current. Between sparks the sphere grows a
-  faint corona.
+  twice as often at twice the belt current. Sphere Finish sets Peek's surface
+  factor m: a polished sphere (m = 1) has no corona before sparkover, as Peek
+  found. A rough one goes into corona at m·V_b and leaks I_c = G(V − V_c) to
+  the room, G derived from ion drift. G is tens of nA per volt against a belt
+  of microamps, so the corona does not slow the climb so much as stop it: the
+  sphere holds at V_c + I/G, and below V_b it never sparks and glows instead.
 - **Plasma globe.** Filaments grow from the electrode to the glass one at a
   time. Each frame each filament's outer part re-forms, so they wander. A
   finger on the glass is a stronger ground that pulls them together.
@@ -93,7 +97,8 @@ streamer violet. The glow redistributes light and never adds any.
 - **Jacob's Ladder:** Rod Spread, Rod Length, Rise Speed and Wind.
 - **Tesla Coil:** BPS (off, then 5 to 1000), Topload Size, and Target (None,
   Floor or Point) with Target X/Y.
-- **Van de Graaff:** Belt Current, Sphere Size and Gap.
+- **Van de Graaff:** Belt Current, Sphere Size, Gap and Sphere Finish (polished
+  sparks; a few per cent rough and it sits in corona).
 - **Plasma Globe:** Globe Size, and Finger with Finger X/Y.
 - **Lichtenberg:** Origin (a point or the bottom edge).
 - **Audio:** Audio (Resolume's FFT buffer). Audio Fires turns each onset into a
@@ -120,7 +125,7 @@ physical value: kV, MΩ, η, ms, BPS, µA.
 | ![Lichtenberg figure](docs/lichtenberg.png) | ![Tesla coil](docs/tesla.png) | ![SW Flyback Over, a Tesla coil over a clip](docs/over.png) |
 
 <sub>Each preset, rendered by `hvtest`: the ladder mid-climb, a Van de Graaff
-spark with corona on the sphere, a neon-xenon globe, a Lichtenberg figure, the
+spark off a polished sphere, a neon-xenon globe, a Lichtenberg figure, the
 coil, and the coil over a test clip through `SW Flyback Over`.</sub>
 
 ## Status
@@ -142,7 +147,7 @@ What is measured, on this machine:
 | fractal dimension | η = 1, six clusters of 3000 sites: **1.744**. The same estimator reads 1.742 on true DLA (literature 1.71). η = 0 gives 2.09, η = 0.5 1.97, η = 2 1.36, η = 6 1.09. Box counting reads DLA as 1.47 at this size, so it is reported and not asserted |
 | Jacob's ladder | every extinction at L\* = **0.1338 m** to one lattice step (worst 0.22 mm past it). The straight climb takes the closed-form **0.371 s** to 0.61 ms, the apex rises at the set 1 m/s, and each restrike is at the bottom. R_s doubled gives L\* 0.064 m |
 | Tesla coil | **7200** bangs in a minute at 120 BPS, and **2250** at 37.5. Mean streamer **0.254/0.255 m** at 4 and 8 BPS (flat), then **0.365, 0.820, 1.072 m** at 60, 120 and 240 BPS with τ = 20 ms |
-| Van de Graaff | every interval **C·V_b/I** = 0.3519 s to 6e-16 s (V_b 189.6 kV, C 18.56 pF), and on screen to a frame. Half the belt gives 0.7038 s. 33 image charges hold both spheres to 5e-15 V |
+| Van de Graaff | polished: every interval **C·V_b/I** = 0.3519 s to 1.3e-11 s (V_b 189.6 kV, C 18.56 pF), and on screen to a frame. Half the belt gives 0.7038 s. 33 image charges hold both spheres to 5e-15 V. In the corona window (m 0.998539): every interval the charging ODE's closed form **0.352393 s** to 8.1e-6 s (bound 9.4e-6), 0.52 ms from the corona-free value. Rough (m 0.95, 0.82): no sparks, held at V_c + I/G to 1e-9 V_b |
 | Kirchhoff | every node of every tree, all five machines: worst \|in−out\|/in **1.1e-7**, free tips equal |
 | light | frame total against energy × efficiency at 640×360 and 1920×1080, with 5 and 24 free tips: worst **1.9e-5**, inside a bound of 4.1e-5 derived from the kernel's sampling and float32 |
 | exposure | at 360°, 95 of 95 bangs each in one frame. At 180°, 48 of 95, none twice. The pixels agree with the clock in every frame, at two rasters |
@@ -152,7 +157,7 @@ What is measured, on this machine:
 | GL state | viewport, vertex array, program, units, framebuffer, blend, scissor, clear colour and buffers, as the host left them |
 | negative controls | **13** wrong models, **all 13** detected |
 | mutation | **7** one-character mutants of the engine and the GLSL, **all 7** caught |
-| dead controls | **47** parameters, all live where they apply |
+| dead controls | **48** parameters, all live where they apply |
 
 Render cost (`hvtest --bench`; GPU time by `GL_TIME_ELAPSED`, engine CPU time
 per frame, on a machine shared with other work while it ran):
@@ -174,7 +179,7 @@ engine plus GPU, is about 18 ms under load.
 
 What is **not** verified, and is the honest limit of this release:
 
-- **Never in a host.** How 52 parameters in thirteen groups present, whether
+- **Never in a host.** How 53 parameters in thirteen groups present, whether
   Resolume's clock arrives in seconds or milliseconds (it is voted on), and
   what its FFT bins really are.
 - **The engine runs on the render thread.** Its worst frame is 11–12 ms (the

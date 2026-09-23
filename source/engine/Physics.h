@@ -172,6 +172,32 @@ double VdgBreakdownVolts( const TwoSpheres& spheres, double a, double b );
 /// The discharge sphere is this fraction of the main sphere's radius.
 constexpr double kVdgGroundRatio = 0.4;
 
+/// Positive ions in atmospheric air, m^2 / (V s): 1.76e-4, from pulsed-corona
+/// measurements ("Measurement of positive ion mobility in air using pulsed
+/// corona discharge", 2017; the textbook range is 1.4-2.2e-4).
+constexpr double kPositiveIonMobility = 1.76e-4;
+
+/// Peek's surface irregularity factor m_v at its rough end: 0.82 for "decided"
+/// corona on stranded cable (Peek 1929, "Visual Corona"). The Sphere Finish
+/// control runs from 1 (polished) to this. Peek tabulates nothing for a spun
+/// sphere; this is his cable value borrowed as the bound.
+constexpr double kRoughestFinish = 0.82;
+
+/// Corona current from a sphere of radius a held at V, above its onset V_c,
+/// with the room's ground a distance b away (b >> a):
+///
+///     I_c = G (V - V_c),   G = 24 pi eps0 mu a V_c / b^2
+///
+/// Derived here, not quoted: unipolar ions drifting at mu E between
+/// concentric spheres, the field at the surface held at its onset value once
+/// corona starts (Kaptzov's assumption), Poisson's equation expanded to first
+/// order in the space charge. (r^2 E)^2 = (a^2 E_c)^2 + (I / 6 pi eps0 mu)
+/// (r^3 - a^3); integrating E from a to b with b >> a gives
+/// V = a E_c + I b^2 / (24 pi eps0 mu a^2 E_c) to first order, and a E_c is V_c.
+/// Valid only near onset; at the currents a Van de Graaff sees (microamps
+/// against a G of tens of nA/V) it is never far from onset.
+double CoronaConductance( double a, double onsetVolts, double b );
+
 //---------------------------------------------------------------------------
 // The Tesla coil.
 //---------------------------------------------------------------------------

@@ -125,6 +125,11 @@ double VdgBreakdownVolts( const TwoSpheres& spheres, double a, double b )
 	return std::min( va, vb );
 }
 
+double CoronaConductance( double a, double onsetVolts, double b )
+{
+	return 24.0 * kPi * kEpsilon0 * kPositiveIonMobility * a * onsetVolts / ( b * b );
+}
+
 //---------------------------------------------------------------------------
 double ToploadCapacitance( double radius )
 {

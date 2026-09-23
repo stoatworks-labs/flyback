@@ -114,6 +114,11 @@ double GapFromParam( float v )
 	return Geometric( v, 0.01, 0.20 );
 }
 
+double FinishFromParam( float v )
+{
+	return Lerp( physics::kRoughestFinish, 1.0, std::clamp( static_cast< double >( v ), 0.0, 1.0 ) );
+}
+
 double GlobeFromParam( float v )
 {
 	return Lerp( 0.08, 0.24, std::clamp( static_cast< double >( v ), 0.0, 1.0 ) );
@@ -183,6 +188,7 @@ Resolved Resolve( const float* p, double level, double aspect )
 	s.belt   = BeltFromParam( p[ PT_BELT ] );
 	s.sphere = SphereFromParam( p[ PT_SPHERE ] );
 	s.gap    = GapFromParam( p[ PT_GAP ] );
+	s.finish = FinishFromParam( p[ PT_FINISH ] );
 
 	s.globe   = GlobeFromParam( p[ PT_GLOBE ] );
 	s.finger  = p[ PT_FINGER ] > 0.5f;
@@ -253,6 +259,12 @@ std::string Display( unsigned int index, const float* p )
 	case PT_BELT: std::snprintf( buffer, sizeof( buffer ), "%.1f uA", s.belt * 1e6 ); break;
 	case PT_SPHERE: std::snprintf( buffer, sizeof( buffer ), "%.2f m", s.sphere ); break;
 	case PT_GAP: std::snprintf( buffer, sizeof( buffer ), "%.1f cm", s.gap * 100.0 ); break;
+	case PT_FINISH:
+		if( s.finish >= 0.99995 )
+			std::snprintf( buffer, sizeof( buffer ), "polished" );
+		else
+			std::snprintf( buffer, sizeof( buffer ), "m %.4f", s.finish );
+		break;
 	case PT_GLOBE: std::snprintf( buffer, sizeof( buffer ), "%.2f m", s.globe ); break;
 	case PT_EFFICIENCY: std::snprintf( buffer, sizeof( buffer ), "%.2f %%", s.efficiency * 100.0 ); break;
 	case PT_GLOW: std::snprintf( buffer, sizeof( buffer ), "%.0f %%", r.look.glow * 100.0f ); break;

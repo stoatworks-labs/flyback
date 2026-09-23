@@ -71,6 +71,7 @@ enum ParamId : unsigned int
 	PT_BELT,
 	PT_SPHERE,
 	PT_GAP,
+	PT_FINISH,
 
 	// Plasma Globe
 	PT_GLOBE,
@@ -166,6 +167,7 @@ double PersistenceFromParam( float v );///< seconds, 0 = none
 double TopFromParam( float v );
 double SphereFromParam( float v );
 double GapFromParam( float v );
+double FinishFromParam( float v );///< Peek's m_v: 0.82 at 0, 1 (polished) at 1
 double GlobeFromParam( float v );
 double SpreadFromParam( float v );
 double RodLengthFromParam( float v );

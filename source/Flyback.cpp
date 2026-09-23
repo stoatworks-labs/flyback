@@ -24,7 +24,7 @@ double WallSeconds()
 /// Which parameter each preset column drives, in presets::Param order.
 constexpr unsigned int kPresetColumns[ presets::kParamCount ] = {
 	PT_MACHINE, PT_SUPPLY,   PT_VOLTAGE, PT_IMPEDANCE, PT_BRANCHING, PT_MEMORY, PT_REACH,  PT_ROD_SPREAD, PT_ROD_LENGTH,
-	PT_RISE,    PT_WIND,     PT_BPS,     PT_TOPLOAD,   PT_TARGET,    PT_BELT,   PT_SPHERE, PT_GAP,        PT_GLOBE,
+	PT_RISE,    PT_WIND,     PT_BPS,     PT_TOPLOAD,   PT_TARGET,    PT_BELT,   PT_SPHERE, PT_GAP,        PT_FINISH, PT_GLOBE,
 	PT_FINGER,  PT_ORIGIN,   PT_EFFICIENCY, PT_GLOW,   PT_GAS,       PT_SHUTTER, PT_PERSISTENCE,
 };
 } // namespace
@@ -76,6 +76,7 @@ void FlybackPlugin::Declare()
 	params[ PT_BELT ]   = 0.5886f;
 	params[ PT_SPHERE ] = 0.4000f;
 	params[ PT_GAP ]    = 0.7686f;
+	params[ PT_FINISH ] = 1.0f;
 
 	params[ PT_GLOBE ]    = 0.7500f;
 	params[ PT_FINGER ]   = 0.0f;
@@ -164,7 +165,8 @@ void FlybackPlugin::Declare()
 	standard( PT_BELT, "Belt Current" );
 	standard( PT_SPHERE, "Sphere Size" );
 	standard( PT_GAP, "Gap" );
-	group( PT_BELT, PT_GAP, "Van de Graaff" );
+	standard( PT_FINISH, "Sphere Finish" );
+	group( PT_BELT, PT_FINISH, "Van de Graaff" );
 
 	standard( PT_GLOBE, "Globe Size" );
 	SetParamInfo( PT_FINGER, "Finger", FF_TYPE_BOOLEAN, params[ PT_FINGER ] > 0.5f );

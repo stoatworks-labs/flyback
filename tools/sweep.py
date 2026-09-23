@@ -65,6 +65,8 @@ SWEEP = {
     "Belt Current": ("0.3", "1", [f"Machine={VDG}"], []),
     "Sphere Size": ("0", "1", [f"Machine={VDG}"], []),
     "Gap": ("0", "1", [f"Machine={VDG}"], []),
+    # Polished sparks; a finish 2% rough clamps the sphere in corona and glows.
+    "Sphere Finish": ("0.9", "1", [f"Machine={VDG}"], []),
     "Globe Size": ("0", "1", [f"Machine={GLOBE}"], []),
     "Finger": ("0", "1", [f"Machine={GLOBE}"], []),
     "Finger X": ("0.2", "0.8", [f"Machine={GLOBE}", "Finger=1"], []),

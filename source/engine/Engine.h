@@ -84,6 +84,7 @@ struct Settings
 	double belt   = 10e-6;///< amperes
 	double sphere = 0.12; ///< metres
 	double gap    = 0.06; ///< metres, surface to surface
+	double finish = 1.0;  ///< Peek's irregularity factor m_v: 1 polished, down to 0.82
 
 	// Plasma globe
 	double globe   = 0.20;///< glass radius, metres
@@ -236,6 +237,14 @@ public:
 	/// Van de Graaff: breakdown volts, capacitance and the interval they imply.
 	double VdgBreakdown() const;
 	double VdgCapacitance() const;
+	/// Van de Graaff: the sphere's voltage now, its corona onset, the corona
+	/// conductance G, and the distance to the room's ground that G uses.
+	double VdgVolts() const;
+	double VdgCoronaOnset() const;
+	double VdgConductance() const;
+	double VdgGroundDistance() const;
+	/// The Van de Graaff's charging-ODE step, seconds (backward Euler).
+	static constexpr double kVdgSubstep = 1e-5;
 	/// Tesla: the energy and voltage of a bang.
 	double TeslaBangJoules() const;
 

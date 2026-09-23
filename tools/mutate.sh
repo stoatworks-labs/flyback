@@ -25,6 +25,8 @@ MUTANTS=(
 	"source/engine/Lattice.cpp|yr[ i ] = -mr[ i ] * ( xr[ i - 1 ] + xr[ i + 1 ] + xr[ i - nx ] + xr[ i + nx ] - 4.0f * xr[ i ] );|yr[ i ] = -mr[ i ] * ( xr[ i - 1 ] + xr[ i + 1 ] + xr[ i - nx ] + xr[ i + nx ] - 5.0f * xr[ i ] );|laplace|engine: the Laplacian's centre weight"
 	"source/engine/Dbm.cpp|const double field = ( 1.0 - phi ) / kBond[ bestK ];|const double field = ( 1.0 + phi ) / kBond[ bestK ];|dimension|engine: growth toward the potential instead of down it"
 	"source/engine/Engine.cpp|next  = anchor + static_cast< double >( bangIndex + 1 ) / s.bps;|next  = anchor + static_cast< double >( bangIndex + 2 ) / s.bps;|tesla|engine: the interrupter skips a beat"
+	"source/engine/Physics.cpp|return 24.0 * kPi * kEpsilon0 * kPositiveIonMobility * a * onsetVolts / ( b * b );|return 25.0 * kPi * kEpsilon0 * kPositiveIonMobility * a * onsetVolts / ( b * b );|vdg|engine: the corona conductance 4% high"
+	"source/engine/Engine.cpp|v = ( volts + dt / C * ( I + G * Vc ) ) / ( 1.0 + dt * G / C );|v = ( volts + dt / C * ( I - G * Vc ) ) / ( 1.0 + dt * G / C );|vdg|engine: the corona drains from zero volts, not from its onset"
 )
 
 caught=0

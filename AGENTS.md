@@ -101,8 +101,23 @@ energy to the frame's pixels.
   shapes the field; the base and strike rail are ground.
 - **The Van de Graaff's spark starts on the cap facing the gap** (within 50° of
   the axis), because that is where the surface field first reaches Peek's
-  value. Corona still comes from the whole sphere. Corona is drawn and NOT
-  charged against the belt, so the interval stays C·V_b/I exactly.
+  value. Corona comes from the whole sphere.
+- **The Van de Graaff's corona is charged against the belt (round two).**
+  C dV/dt = I − G(V − V_c) past onset V_c = m·V_b, where m is Peek's surface
+  factor (the Sphere Finish control, 1 polished to 0.82) and
+  G = 24π ε₀ μ a V_c / b², derived in `Physics.h` from unipolar ion drift with
+  the surface field held at onset (Kaptzov) to first order in space charge;
+  b is the sphere-to-base distance, 0.34 m. Integrated by backward Euler at
+  10 µs, exact for the belt alone. The finding: τ = C/G ≈ 0.7 ms and I/G ≈
+  350–420 V, so the corona does not visibly slow the climb, it clamps it at
+  V_c + I/G. The sphere both glows and sparks only when V_b − V_c < I/G, a
+  window m > 0.998. Polished (m = 1) has no corona term at all (Peek: between
+  spheres, sparkover comes before visual corona while the spacing is under
+  about 2.04 radii; here 10 cm against a 15 cm sphere, 0.67), so the
+  interval is C·V_b/I to rounding. Setting V_c = m·V_b (onset as a fraction
+  of the sparkover voltage, rather than Peek's visual-corona formula for the
+  sphere alone) is a simplification: it keeps the polished limit exact.
+  Sphere Finish is a preset column, 1.0 in every row, so presets are polished.
 - **The Van de Graaff's capacitance is the two-sphere one**, from the same
   image series (18.56 pF, against 16.7 pF for the sphere alone).
 - **Globe filaments grow one at a time**, each to the glass. That path becomes
@@ -219,7 +234,7 @@ from a quieter run (load ~8).
 | `--dimension` | 1.70 ± 0.05; η = 0 > 1.9; η = 6 < 1.25; monotonic | the spec's and literature's band, and 3 SE on the DLA reference | engine only, lattice in metres: no rasteriser or raster enters. Floating-point order could change one site's choice; the statistic would not notice |
 | `--ladder` | L* to one lattice step (the column is measured on a polyline refined to h/4); climb time to one frame | the arc cannot be located more finely than the lattice it lives on; the spec's "± one frame" | engine only, metres and seconds: raster-independent by construction |
 | `--tesla` | bang count exact; lengths compared at 3 SE, the SE widened by √(τ·BPS) for the correlation between bangs sharing channel | a clock is exact; the memory claim is statistical | engine only |
-| `--vdg` | interval to one frame; images to 1e-9 V at the surfaces | the spec's; the image series converges to 1e-14 of the first charge | engine only |
+| `--vdg` | polished interval to 1e-9 s; corona interval to dt/(2e)·(V∞−V_c)/(V∞−V_b) + 1.125 dt²/τ; rough equilibrium to 1e-9 V_b; images to 1e-9 V at the surfaces | the belt alone is integrated exactly; backward Euler's global error on a linear decay, the step straddling V_c, and the linear read of the crossing; BE's fixed point is the ODE's; the image series converges to 1e-14 of the first charge | engine only |
 | `--kirchhoff` | 8 × 2 × 2^-24 relative | float currents, at most 8 children per node, one rounding each | engine only |
 | `--light` | 2·2e^(−2π²σ²) + J/6 + 1.5e-7 + (stores+1)·16·2^-24, σ = 0.8 px | Poisson summation of the kernel at its narrowest; A&S erf; float32 stores worst-case | a pixel check, run at 640×360 and 1920×1080. Another rasteriser changes where pixel centres fall, which the Poisson bound already covers at any phase. A GPU that stored float32 with less precision would need its own term |
 | `--exposure` | exact (event counts); pixel light within 1% | a spark is in a window or it is not; 1% only guards the pixel sum, which `--light` holds tighter | two rasters (480×270, 1280×720); the frame a spark lands in is from the clock, not the rasteriser |
@@ -252,6 +267,8 @@ and `oxbow selftest` instantiating each through the host path.
 | the low-current constants A = 350 V, B = 1 kV/m, C = 5 W, D = 750 W/m | **not settled by any source**; D is inside two sourced bounds | upper bound on the column field: a non-thermal atmospheric air glow runs at 1.2 kV/cm up to 22 mA (Mohamed, Block & Schoenbach, *IEEE Trans. Plasma Sci.* 30, 182, 2002), i.e. D ≲ 2400 W/m; the classic 12–15 kV / 20–30 mA ladder has rods 1/4" apart at the bottom and 1–3" at the top (D. Klipstein, donklipstein.com/jacobs.htm), so L* ≳ 3" once bowed. D = 750 W/m gives L* = 13 cm and 0.5 kV/cm at 15 mA. A (cathode fall) is from memory and changes L* by 5% |
 | N₂ second positive line weights | **replaced**: now the v'=0 progression weighted by Franck–Condon factor × ν⁴ | q(0,v'') = 0.500, 0.319, 0.101, 0.0488, 0.0247 from R. W. Nicholls, *J. Res. NBS* 65A (1961), table 2. The v'=1 and v'=2 rows as read this session were not legible enough to trust and are left out. The colour moved from (0.162, 0, 0.838) to (0.171, 0, 0.829) |
 | N₂⁺ first negative 391.4 nm at 0.2 × 337.1 nm | **assumption, no source**: the ratio depends on the reduced field and published corona spectra span a wide range | 427.8 nm follows from N₂⁺ B–X Franck–Condon factors (0.66, 0.25; from memory) × ν⁴ |
+| positive ion mobility in air, μ = 1.76 cm²/Vs | **sourced** (pulsed-corona measurement, 2017, "Measurement of positive ion mobility in air using pulsed corona discharge"); textbook range 1.4–2.2 | sets the corona conductance G linearly |
+| Peek's surface factor m_v: 1 polished, 0.82 rough | **sourced for cables, borrowed for a sphere** | Peek 1929, "Visual Corona": 0.82 for "decided" corona on stranded cable (0.72 local). He tabulates nothing for a spun aluminium sphere; 0.82 is the knob's end, not a measured sphere |
 | Kim, Sewall & Lin (2007) as the superposition method's source | not re-checked; the method was measured and rejected either way | |
 
 The checks re-derive their expectations from these: `--vdg` works out Peek's
