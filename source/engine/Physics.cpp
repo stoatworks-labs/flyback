@@ -204,13 +204,28 @@ Rgb FromLines( const Line* lines, int count )
 	return ToWeights( X, Y, Z );
 }
 
-// N2 second positive (band heads) and N2+ first negative, as in air corona
-// and streamer spectra. Relative intensities are typical of a positive
-// streamer in air; only 380 nm and up does the eye see at all. (From memory
-// of published corona spectra; not checked against a source this session.)
+// Air: the N2 second positive system (C -> B) and the N2+ first negative
+// (B -> X), the emission of corona and streamers in air.
+//
+// The second positive bands are the v' = 0 progression, weighted by their
+// Franck-Condon factors times nu^4 (radiant energy per band goes as q nu^4 for
+// a fixed upper-state population): q(0,v'') = 0.500, 0.319, 0.101, 0.0488,
+// 0.0247 for v'' = 0..4 -- R. W. Nicholls, "Franck-Condon factors to high
+// vibrational quantum numbers I: N2 and N2+", J. Res. NBS 65A (1961), table 2.
+// The v' = 1 and 2 progressions are left out: the copy of that table read in
+// this session was not legible enough to trust, and they add mostly UV.
+//
+// The first negative's 391.4 nm band is taken at 0.2 of 337.1. That ratio
+// is NOT from a source: it depends on the reduced field (it is how streamer
+// fields are measured), and published corona spectra put it anywhere from a
+// few percent to comparable. 427.8 nm follows from N2+ B-X Franck-Condon
+// factors q00 = 0.66, q01 = 0.25 (from memory) and the same nu^4.
+//
+// Only 380 nm and up is visible, so the colour is set almost entirely by
+// 380.5, 391.4, 405.9, 427.8 and 434.4 nm.
 constexpr Line kAir[] = {
-	{ 315.9, 0.50 }, { 337.1, 1.00 }, { 353.7, 0.20 }, { 357.7, 0.65 }, { 371.0, 0.10 }, { 375.5, 0.20 },
-	{ 380.5, 0.30 }, { 391.4, 0.30 }, { 394.3, 0.06 }, { 399.8, 0.12 }, { 405.9, 0.10 }, { 427.8, 0.10 },
+	{ 337.1, 1.000 }, { 357.7, 0.503 }, { 380.5, 0.124 }, { 405.9, 0.0465 }, { 434.4, 0.0179 },
+	{ 391.4, 0.200 }, { 427.8, 0.053 },
 };
 
 // Neon's red-orange forest (NIST ASD strong lines; weights approximate).

@@ -28,20 +28,26 @@ constexpr double kEpsilon0 = 8.8541878128e-12;///< F/m
 /// it sets how wide a gap a supply can strike across.
 constexpr double kAirBreakdown = 3.0e6;
 
-/// The field a positive streamer needs to keep propagating in air, V/m --
-/// about 5 kV/cm. A streamer from a topload at V cannot be longer than
-/// V / kStreamerField. (Background knowledge, not checked against a text in
-/// this session: the literature quotes 4.5 to 5 kV/cm for positive streamers.)
+/// The field a positive streamer needs to keep propagating in air, V/m: the
+/// "stability field", 4.5 to 5 kV/cm in the experiments; Allen & Ghaffar
+/// (1995) measured 4.55 kV/cm in the streamer zone of a positive leader, and
+/// simulations find steady propagation at 4.675 kV/cm (X. Li et al.,
+/// "Simulations of positive streamers in air in different electric fields",
+/// Plasma Sources Sci. Technol. 30 (2021), arXiv:2107.06781). 5 kV/cm is the
+/// top of that range. A streamer from a topload at V cannot be longer than
+/// V / kStreamerField.
 constexpr double kStreamerField = 5.0e5;
 
-/// Peek's law for the corona-onset / breakdown field at the surface of a
-/// sphere of radius r (metres), relative air density 1:
+/// Peek's law for the visual corona / breakdown gradient at the surface of a
+/// sphere of radius r, relative air density delta:
 ///
-///     E_c = 27.2 (1 + 0.54 / sqrt(r_cm)) kV/cm
+///     g_v = 27.2 delta (1 + 0.54 / sqrt(delta r_cm)) kV/cm (maximum)
 ///
-/// F. W. Peek, "Dielectric Phenomena in High Voltage Engineering" (1929).
-/// Carried from memory; the cylinder form (30 (1 + 0.301/sqrt r)) is the
-/// better known of the two. Returns V/m.
+/// F. W. Peek, "Dielectric Phenomena in High Voltage Engineering" (McGraw-
+/// Hill, 1915/1929), eq. (28), "For spheres", and its density-corrected form
+/// on p. 93; checked against the text (archive.org) in round two. Peek gives
+/// the average error of voltages calculated this way as within 2% for spheres
+/// of 2 cm diameter and over. delta = 1 here. Returns V/m.
 double PeekSphere( double radiusMetres );
 
 //---------------------------------------------------------------------------
@@ -80,19 +86,26 @@ const char* SupplyName( SupplyKind kind );
 //---------------------------------------------------------------------------
 
 /// V_arc = A + B L + (C + D L) / I   (Hertha Ayrton, "The Electric Arc",
-/// 1902). The FORM is Ayrton's. Her constants are for carbon arcs at
-/// amperes, where the column needs 10.5 W/mm; a Jacob's ladder runs at tens
-/// of milliamps, where extrapolating them puts extinction at a centimetre.
-/// So the constants here are for the low-current column:
+/// 1902, eq. 3, checked against the text on archive.org). The FORM is
+/// Ayrton's. Her constants are V = 38.88 + 2.074 l + (11.66 + 10.54 l)/A, with
+/// l in millimetres, for a silent arc between solid carbons at 1.6 to 14 A: the
+/// column needs 10.54 W/mm, and extrapolated to a Jacob's ladder's tens of
+/// milliamps it would put extinction at a centimetre. So the constants here are
+/// for the low-current column, and no source settles them:
 ///
-/// - A = 350 V, the cathode and anode falls of an atmospheric glow-arc;
+/// - A = 350 V, the order of a normal glow's cathode fall in air (from memory);
 /// - B = 1 kV/m, a small current-independent column term;
 /// - C = 5 W, the electrode loss;
-/// - D = 750 W/m, the column's power per metre at low current. This is
-///   the one that decides the ladder: in the limit of a stiff supply the
-///   extinction length is V_oc I_sc / 4D, and 750 W/m puts a 15 kV / 30 mA
-///   neon-sign transformer's arc out at 13 cm -- the height hobbyists report.
-///   That last clause is a calibration against folklore, and says so.
+/// - D = 750 W/m, the column's power per metre at low current -- the one that
+///   decides the ladder, since for a stiff supply L* ~ V_oc I_sc / 4D. Two
+///   bounds, both sourced: a NON-thermal atmospheric glow column in air runs at
+///   1.2 kV/cm at up to 22 mA (Mohamed, Block & Schoenbach, IEEE Trans. Plasma
+///   Sci. 30, 182, 2002), which would be D ~ 2400 W/m; a ladder's arc is
+///   hotter, and a hotter column needs less field. And the classic 12-15 kV /
+///   20-30 mA ladder is built with rods 1/4" apart at the bottom and 1-3" at the
+///   top (D. Klipstein, donklipstein.com/jacobs.htm), so the bowed arc snaps at
+///   somewhat more than 3": D = 750 W/m puts a 15/30 NST's L* at 13 cm, 0.5
+///   kV/cm at 15 mA. It is inside both bounds; it is not measured.
 struct Ayrton
 {
 	double A = 350.0;

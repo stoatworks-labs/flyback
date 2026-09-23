@@ -242,22 +242,22 @@ build, lipo showing both slices on both bundles, plists, ad-hoc signatures,
 `oxbow probe` reading HV01/SW Flyback/source and HV02/SW Flyback Over/effect,
 and `oxbow selftest` instantiating each through the host path.
 
-Carried from memory, not checked against a text in this session:
+## The constants, checked against their sources (round two)
 
-- **Peek's law for spheres**, 27.2 (1 + 0.54/√r_cm) kV/cm. The cylinder form is
-  the better known. It sets the Van de Graaff's V_b, and `--vdg` checks the
-  timing against it, not against a measured V_b.
-- **The positive streamer propagation field, 5 kV/cm**, which caps the coil's
-  streamer length.
-- **The low-current Ayrton constants.** The form is Ayrton's. A = 350 V (glow
-  falls), B = 1 kV/m, C = 5 W and D = 750 W/m are this repo's. D was chosen so
-  a 15 kV / 30 mA NST's arc goes out near 13 cm, the height hobbyists report:
-  a calibration against folklore.
-- **The spectral line lists' relative intensities** for air (N₂ second
-  positive, N₂⁺ first negative), neon, argon and xenon. The wavelengths are
-  NIST's; the weights are approximate.
-- **Kim, Sewall & Lin (2007)** as the source of the superposition method that
-  was measured and rejected.
+| constant | status | source |
+| --- | --- | --- |
+| Peek's law for spheres, g_v = 27.2 δ (1 + 0.54/√(δ r_cm)) kV/cm | **confirmed**, exactly as coded | F. W. Peek, *Dielectric Phenomena in High Voltage Engineering* (1929 ed.), eq. (28) "For spheres" and p. 93; full text on archive.org (`dielectricpheno00peekgoog`). Peek: calculated voltages within 2% for spheres ≥ 2 cm diameter |
+| positive streamer propagation field, 5 kV/cm | **confirmed** as the top of the measured range | the "stability field" is 4.5–5 kV/cm; Allen & Ghaffar (1995) measured 4.55 kV/cm; steady propagation at 4.675 kV/cm in X. Li et al., *Plasma Sources Sci. Technol.* 30 (2021), arXiv:2107.06781 |
+| Ayrton's own constants (38.88, 2.074, 11.66, 10.54; V, V/mm, W, W/mm) | **confirmed** | H. Ayrton, *The Electric Arc* (1902), eq. (3), for a silent arc between solid carbons at 1.6–14 A; archive.org `electricarc00ayrtrich` |
+| the low-current constants A = 350 V, B = 1 kV/m, C = 5 W, D = 750 W/m | **not settled by any source**; D is inside two sourced bounds | upper bound on the column field: a non-thermal atmospheric air glow runs at 1.2 kV/cm up to 22 mA (Mohamed, Block & Schoenbach, *IEEE Trans. Plasma Sci.* 30, 182, 2002), i.e. D ≲ 2400 W/m; the classic 12–15 kV / 20–30 mA ladder has rods 1/4" apart at the bottom and 1–3" at the top (D. Klipstein, donklipstein.com/jacobs.htm), so L* ≳ 3" once bowed. D = 750 W/m gives L* = 13 cm and 0.5 kV/cm at 15 mA. A (cathode fall) is from memory and changes L* by 5% |
+| N₂ second positive line weights | **replaced**: now the v'=0 progression weighted by Franck–Condon factor × ν⁴ | q(0,v'') = 0.500, 0.319, 0.101, 0.0488, 0.0247 from R. W. Nicholls, *J. Res. NBS* 65A (1961), table 2. The v'=1 and v'=2 rows as read this session were not legible enough to trust and are left out. The colour moved from (0.162, 0, 0.838) to (0.171, 0, 0.829) |
+| N₂⁺ first negative 391.4 nm at 0.2 × 337.1 nm | **assumption, no source**: the ratio depends on the reduced field and published corona spectra span a wide range | 427.8 nm follows from N₂⁺ B–X Franck–Condon factors (0.66, 0.25; from memory) × ν⁴ |
+| Kim, Sewall & Lin (2007) as the superposition method's source | not re-checked; the method was measured and rejected either way | |
+
+The checks re-derive their expectations from these: `--vdg` works out Peek's
+V_b afresh from the formula as quoted above, and `--ladder` bisects Ayrton's
+equation with the constants in `physics::Ayrton`. None changed value, so no
+expected number moved.
 
 Assumed, or not yet done:
 
