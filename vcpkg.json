@@ -1,0 +1,11 @@
+{
+  "name": "flyback",
+  "version-string": "0.1.0",
+  "description": "Dependencies for building the Flyback FFGL plugins (a source and an effect). GLEW is only needed on Windows; macOS uses the system OpenGL framework.",
+  "dependencies": [
+    {
+      "name": "glew",
+      "platform": "!osx"
+    }
+  ]
+}
