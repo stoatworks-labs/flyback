@@ -1066,6 +1066,7 @@ let renderer = null;
 const mounted = mountDemo({
   name: 'Flyback',
   pluginId: 'HV01 · HV02',
+  kind: ['source', 'effect'],
   tagline:
     'High-voltage discharges — a Jacob’s ladder, a Tesla coil, a Van de Graaff, a plasma globe and a Lichtenberg figure — grown by the dielectric breakdown model. Nothing is drawn as a shape of lightning: the potential in the air is solved as a Laplace problem, the channel grows toward where the field is strongest, and five small circuits decide when the air breaks and how much energy it carries. The light is the plugin’s own shaders; the physics is a full JavaScript port of its engine.',
   repo: 'https://github.com/stoatworks-labs/flyback',
