@@ -140,8 +140,8 @@ coil, and the coil over a test clip through `SW Flyback Over`.</sub>
 It has **never been loaded into Resolume**. `oxbow probe` reads both bundles
 the way a host does and finds `SW Flyback` / `HV01` / source and
 `SW Flyback Over` / `HV02` / effect. `oxbow selftest` instantiates each through
-the host's own path and renders. Nothing else has run it. There is no OpenFX
-port, browser demo or user guide. It has only been built and measured on
+the host's own path and renders. Nothing else has run it. There is a
+[user guide](docs/USER-GUIDE.md); no OpenFX port and no browser demo. It has only been built and measured on
 macOS (Apple Silicon, M4 Max). The Windows build is in CI and has never run.
 
 What is measured, on this machine:
