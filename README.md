@@ -119,6 +119,18 @@ spectral lines through the CIE observer. A channel moves toward a 6500 K
 blackbody as its current nears an ampere, so a strike is white-hot and a
 streamer violet. The glow redistributes light and never adds any.
 
+[![Flyback — Tesla coils, Jacob's ladders and plasma globes, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=jyy29bOI0NA)
+
+*[Watch it](https://www.youtube.com/watch?v=jyy29bOI0NA) — 83 seconds:
+the Jacob's ladder climbing, snapping and restriking; the Tesla coil's
+streamers lengthening as BPS rises; a Van de Graaff sparking every C·V/I and
+a rough sphere holding in corona; a plasma globe and a finger; a Lichtenberg
+figure; Branching from bush to lightning to arc; the gases; and SW Flyback
+Over striking into Resolume's demo clips. Every frame is the real plugins'
+output: an FFGL plugin has no window, so the footage is rendered by this
+repository's own offline harness (`hvtest --film` and `--pipe`, driven by cue
+sheets) rather than filmed off a screen.*
+
 ## Controls
 
 - **Machine:** Preset (one per machine), Machine, Fire (a bang, a spark, a
