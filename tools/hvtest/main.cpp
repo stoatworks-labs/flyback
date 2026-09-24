@@ -13,8 +13,16 @@
 
     The claims, one flag each, physics first. The physics checks run on the
     engine in metres and seconds, on a lattice sized in metres -- they cannot
-    depend on a rasteriser or a raster. The pixel checks (--light, --exposure)
-    run at two rasters.
+    depend on a rasteriser or a raster. The pixel checks run at their
+    development raster(s) (--light and --exposure at two); `--size WxH` runs
+    any of them at that raster instead, and verify.sh adds 320x180, CI's.
+
+        --offline      every check that needs no GL context, with its negative
+                       controls; never creates a context (CI). The set is the
+                       `checks` table in main(), the one place that says so.
+        hvtest --pipe / --film exit 0 at the end of the stream (a partial
+        frame at EOF ends it), 2 for a cue or --set naming no parameter, and 1
+        with a message on stderr for a failed render or a closed stdout.
 
         --laplace      the solver on a coaxial electrode against ln(r/R2)/ln(R1/R2)
         --dimension    eta = 1 clusters have fractal dimension 1.70 +- 0.05; eta = 0
@@ -56,11 +64,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <csignal>
+#include <cerrno>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <set>
@@ -107,6 +118,19 @@ void Note( const std::string& message )
 {
 	std::printf( "        %s\n", message.c_str() );
 	std::fflush( stdout );
+}
+
+//---------------------------------------------------------------------------
+// The raster a pixel check runs at. Each has its development raster(s); with
+// `--size WxH` it runs at that one instead. verify.sh runs every pixel check
+// both ways, the second at 320x180, CI's raster (BRIEF-ADDENDUM).
+//---------------------------------------------------------------------------
+using Size = std::pair< int, int >;
+std::vector< Size > g_rasters;
+
+std::vector< Size > Rasters( std::initializer_list< Size > development )
+{
+	return g_rasters.empty() ? std::vector< Size >( development ) : g_rasters;
 }
 
 int Verdict()
@@ -1341,7 +1365,7 @@ int runKirchhoff( const Perturb& perturb )
 int runLight( const Perturb& perturb )
 {
 	std::printf( "\n=== light: the frame holds the events' energy x efficiency, however it branches\n" );
-	for( const auto& size : { std::pair< int, int >( 640, 360 ), std::pair< int, int >( 1920, 1080 ) } )
+	for( const Size& size : Rasters( { { 640, 360 }, { 1920, 1080 } } ) )
 	{
 		// A Van de Graaff at half scale: a compact spark in the middle of the
 		// frame, so the glow's widest octave stays inside it.
@@ -1416,7 +1440,7 @@ int runLight( const Perturb& perturb )
 int runExposure( const Perturb& perturb )
 {
 	std::printf( "\n=== exposure: a spark is in one frame, or none, never two\n" );
-	for( const auto& size : { std::pair< int, int >( 480, 270 ), std::pair< int, int >( 1280, 720 ) } )
+	for( const Size& size : Rasters( { { 480, 270 }, { 1280, 720 } } ) )
 		for( double shutter : { 1.0, 0.5 } )
 		{
 			Rig rig;
@@ -1488,13 +1512,15 @@ int runExposure( const Perturb& perturb )
 int runDeterminism( const Perturb& perturb )
 {
 	std::printf( "\n=== determinism: the same seed renders the same frames, on the worker thread too\n" );
+	const Size size = Rasters( { { 480, 270 } } ).front();
+	std::printf( "  at %dx%d\n", size.first, size.second );
 	for( int m : { 1, 0, 3 } )
 	{
 		// Every frame of the film, not just the last: the worker's frames are
 		// compared with the synchronous ones one frame earlier.
 		auto film = [ & ]( float seed, bool worker ) {
 			Rig rig;
-			rig.Init( 480, 270, false, nullptr, worker );
+			rig.Init( size.first, size.second, false, nullptr, worker );
 			rig.Set( PT_MACHINE, static_cast< float >( m ) );
 			rig.Set( PT_SEED, seed );
 			std::vector< Bytes > frames;
@@ -1530,7 +1556,9 @@ int runDeterminism( const Perturb& perturb )
 int runOver( const Perturb& perturb )
 {
 	std::printf( "\n=== over: the clip is the ground\n" );
-	const int w = 640, h = 360;
+	const Size size = Rasters( { { 640, 360 } } ).front();
+	const int w = size.first, h = size.second;
+	std::printf( "  at %dx%d\n", w, h );
 	const double cx = 0.68, cy = 0.52, r = 0.10;
 	for( bool disc : { true, false } )
 	{
@@ -1596,8 +1624,10 @@ int runOver( const Perturb& perturb )
 int runOnset( const Perturb& perturb )
 {
 	std::printf( "\n=== onset: the first hit after a clip trigger fires\n" );
+	const Size size = Rasters( { { 320, 180 } } ).front();
+	std::printf( "  at %dx%d\n", size.first, size.second );
 	auto rig = [ & ]( Rig& r ) {
-		r.Init( 320, 180, false );
+		r.Init( size.first, size.second, false );
 		r.Set( PT_MACHINE, static_cast< float >( Machine::Tesla ) );
 		r.Set( PT_BPS, 0.0f );// no clock: only the audio fires
 		r.Set( PT_AUDIO_FIRES, 0.6f );
@@ -1716,10 +1746,13 @@ int runNames( const Perturb& )
 int runState( const Perturb& )
 {
 	std::printf( "\n=== state: what the host hands over is what it gets back\n" );
+	const Size size = Rasters( { { 320, 180 } } ).front();
+	const int w = size.first, h = size.second;
+	std::printf( "  at %dx%d\n", w, h );
 	for( bool over : { false, true } )
 	{
 		Rig rig;
-		if( !rig.Init( 320, 180, over ) )
+		if( !rig.Init( w, h, over ) )
 			return 1;
 		GLuint hostArray = 0;
 		glGenVertexArrays( 1, &hostArray );
@@ -1728,13 +1761,13 @@ int runState( const Perturb& )
 		for( int frame = 0; frame < 3; ++frame )
 		{
 			glBindFramebuffer( GL_FRAMEBUFFER, rig.outputFBO );
-			glViewport( 0, 0, 320, 180 );
+			glViewport( 0, 0, w, h );
 			glBindVertexArray( hostArray );
 			glEnable( GL_BLEND );
 			glBlendFuncSeparate( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO );
 			glClearColor( 0.2f, 0.3f, 0.4f, 0.5f );
 			glEnable( GL_SCISSOR_TEST );
-			glScissor( 0, 0, 320, 180 );
+			glScissor( 0, 0, w, h );
 			glActiveTexture( GL_TEXTURE3 );
 			glActiveTexture( GL_TEXTURE0 );
 			glUseProgram( 0 );
@@ -1760,7 +1793,7 @@ int runState( const Perturb& )
 					what += std::string( " " ) + name;
 				}
 			};
-			expect( viewport[ 2 ] == 320 && viewport[ 3 ] == 180, "viewport" );
+			expect( viewport[ 2 ] == w && viewport[ 3 ] == h, "viewport" );
 			expect( array == static_cast< GLint >( hostArray ), "vertex-array" );
 			expect( program == 0, "program" );
 			expect( unit == GL_TEXTURE0, "active-unit" );
@@ -1792,7 +1825,7 @@ int runState( const Perturb& )
 //===========================================================================
 // --negative
 //===========================================================================
-int runNegative()
+int runNegative( const std::set< std::string >* only = nullptr )
 {
 	struct Case
 	{
@@ -1822,6 +1855,9 @@ int runNegative()
 	add( "over", runOver, []( Perturb& p ) { p.swapGround = true; }, "expect the strikes on the floor despite the disc" );
 	add( "onset", runOnset, []( Perturb& p ) { p.deafOnset = true; }, "an analyser that is not primed" );
 
+	if( only != nullptr )
+		cases.erase( std::remove_if( cases.begin(), cases.end(), [ & ]( const Case& c ) { return only->count( c.name ) == 0; } ),
+		             cases.end() );
 	int undetected = 0;
 	for( const Case& c : cases )
 	{
@@ -1987,14 +2023,17 @@ int runPipe( int width, int height, bool effect, const std::string& scriptPath, 
 {
 	Rig rig;
 	if( !rig.Init( width, height, effect ) )
+	{
+		std::fprintf( stderr, "hvtest: the plugin did not initialise at %dx%d\n", width, height );
 		return 1;
+	}
 	if( beat )
 		rig.feed = AudioFeed::Pulses;
 	for( const std::string& s : settings )
 	{
 		const size_t eq = s.find( '=' );
 		if( eq == std::string::npos || !rig.Set( s.substr( 0, eq ), std::strtof( s.substr( eq + 1 ).c_str(), nullptr ) ) )
-			return 2;
+			return 2;// Set() has said which name
 	}
 	std::map< unsigned int, Track > automation;
 	if( !scriptPath.empty() )
@@ -2054,7 +2093,10 @@ int runPipe( int width, int height, bool effect, const std::string& scriptPath, 
 				rig.plugin->SetFloatParameter( track.first, v );
 		}
 		if( !rig.Render( 1 ) )
+		{
+			std::fprintf( stderr, "hvtest: frame %d did not render\n", index );
 			return 1;
+		}
 		const Bytes out = rig.Output();
 		Bytes flipped( out.size() );
 		for( int y = 0; y < height; ++y )
@@ -2064,8 +2106,16 @@ int runPipe( int width, int height, bool effect, const std::string& scriptPath, 
 		while( written < flipped.size() )
 		{
 			const ssize_t put = write( STDOUT_FILENO, flipped.data() + written, flipped.size() - written );
+			if( put < 0 && errno == EINTR )
+				continue;
 			if( put <= 0 )
+			{
+				// The reader hung up (`| head -c 1`, ffmpeg dying). SIGPIPE is
+				// ignored in main(), so this is an error return, not a silent 141.
+				std::fprintf( stderr, "hvtest: stdout closed after %d frame%s (%s); stopping\n", index, index == 1 ? "" : "s",
+				              put < 0 ? std::strerror( errno ) : "wrote nothing" );
 				return 1;
+			}
 			written += static_cast< size_t >( put );
 		}
 	}
@@ -2084,6 +2134,27 @@ int main( int argc, char** argv )
 	std::string mode, scriptPath;
 	int filmFrames = -1;
 	std::vector< int > fireFrames;
+	bool sizeGiven = false;
+
+	// Every check, and whether it needs a GL context. This is the ONE place
+	// that says so: --offline is the checks marked false here, with their
+	// negative controls, and CI runs --offline because a GitHub macOS runner
+	// cannot create an accelerated GL context. A new check added here is in
+	// the offline set, or out of it, without anyone editing the workflow.
+	struct CheckEntry
+	{
+		int ( *run )( const Perturb& );
+		bool gl;
+	};
+	const std::map< std::string, CheckEntry > checks = {
+		{ "laplace", { runLaplace, false } },         { "dimension", { runDimension, false } },
+		{ "ladder", { runLadder, false } },           { "tesla", { runTesla, false } },
+		{ "vdg", { runVdg, false } },                 { "kirchhoff", { runKirchhoff, false } },
+		{ "defaults", { runDefaults, false } },       { "names", { runNames, false } },
+		{ "light", { runLight, true } },              { "exposure", { runExposure, true } },
+		{ "determinism", { runDeterminism, true } },  { "over", { runOver, true } },
+		{ "onset", { runOnset, true } },              { "state", { runState, true } },
+	};
 
 	for( int i = 1; i < argc; ++i )
 	{
@@ -2096,7 +2167,9 @@ int main( int argc, char** argv )
 			             "  --fire N (press Fire on frame N; repeatable)   --beat   --set \"Name=V\"\n"
 			             "  --list   --film N --script CUES   --pipe\n\n"
 			             "  --laplace --dimension --ladder --tesla --vdg --kirchhoff --light --exposure\n"
-			             "  --determinism --over --onset --defaults --names --state --negative --bench\n" );
+			             "  --determinism --over --onset --defaults --names --state --negative --bench\n"
+			             "  --offline   every check that needs no GL context, and their negative controls\n"
+			             "  a pixel check with --size WxH runs at that raster instead of its own\n" );
 			return 0;
 		}
 		else if( a == "--out" && next )
@@ -2133,10 +2206,14 @@ int main( int argc, char** argv )
 				width  = std::atoi( v.substr( 0, x ).c_str() );
 				height = std::atoi( v.substr( x + 1 ).c_str() );
 			}
+			if( x == std::string::npos || width < 16 || height < 16 )
+			{
+				std::fprintf( stderr, "--size wants WxH, got '%s'\n", v.c_str() );
+				return 2;
+			}
+			sizeGiven = true;
 		}
-		else if( a == "--list" || a == "--laplace" || a == "--dimension" || a == "--ladder" || a == "--tesla" || a == "--vdg"
-		         || a == "--kirchhoff" || a == "--light" || a == "--exposure" || a == "--determinism" || a == "--over"
-		         || a == "--onset" || a == "--defaults" || a == "--names" || a == "--state" || a == "--negative" || a == "--bench" )
+		else if( a == "--list" || a == "--negative" || a == "--bench" || a == "--offline" || ( a.rfind( "--", 0 ) == 0 && checks.count( a.substr( 2 ) ) ) )
 			mode = a.substr( 2 );
 		else
 		{
@@ -2150,6 +2227,12 @@ int main( int argc, char** argv )
 		settings.insert( settings.begin(), "Preset=" + std::to_string( preset ) );
 
 	const Perturb none;
+	if( sizeGiven && mode != "pipe" && mode != "bench" )
+		g_rasters = { { width, height } };
+	// --pipe and --film write frames on stdout: a reader that hangs up must be
+	// an error return from write(), reported, not a silent SIGPIPE (141).
+	signal( SIGPIPE, SIG_IGN );
+
 	// No GL needed for these.
 	if( mode == "list" )
 	{
@@ -2163,22 +2246,42 @@ int main( int argc, char** argv )
 		}
 		return 0;
 	}
-	if( mode == "laplace" )
-		return runLaplace( none );
-	if( mode == "dimension" )
-		return runDimension( none );
-	if( mode == "ladder" )
-		return runLadder( none );
-	if( mode == "tesla" )
-		return runTesla( none );
-	if( mode == "vdg" )
-		return runVdg( none );
-	if( mode == "kirchhoff" )
-		return runKirchhoff( none );
-	if( mode == "defaults" )
-		return runDefaults( none );
-	if( mode == "names" )
-		return runNames( none );
+	if( mode == "offline" )
+	{
+		// Never creates a GL context: safe on a runner with no GPU.
+		std::set< std::string > offline;
+		std::string ran, skipped;
+		int result = 0;
+		for( const auto& entry : checks )
+			if( entry.second.gl )
+				skipped += " --" + entry.first;
+			else
+			{
+				offline.insert( entry.first );
+				ran += " --" + entry.first;
+				g_failures = 0;// each check's verdict is its own
+				result |= entry.second.run( none );
+			}
+		g_failures = 0;
+		result |= runNegative( &offline );
+		std::printf( "\n"
+		             "  ################################################################\n"
+		             "  ##  --offline: NO GL CONTEXT WAS CREATED.\n"
+		             "  ##  The shader and pixel checks were NOT run:\n"
+		             "  ##   %s\n"
+		             "  ##  Nothing here says the GLSL compiles or renders: that is\n"
+		             "  ##  tools/glslc.sh (compiles) and tools/verify.sh (renders).\n"
+		             "  ################################################################\n",
+		             skipped.c_str() );
+		std::printf( "  ran:%s, and their negative controls\n", ran.c_str() );
+		std::printf( "\n  offline: %s\n", result == 0 ? "PASS" : "FAIL" );
+		return result == 0 ? 0 : 1;
+	}
+	{
+		const auto it = checks.find( mode );
+		if( it != checks.end() && !it->second.gl )
+			return it->second.run( none );
+	}
 
 	CGLContextObj context = createContext();
 	if( context == nullptr )
@@ -2187,18 +2290,8 @@ int main( int argc, char** argv )
 		return 1;
 	}
 	int result = 0;
-	if( mode == "light" )
-		result = runLight( none );
-	else if( mode == "exposure" )
-		result = runExposure( none );
-	else if( mode == "determinism" )
-		result = runDeterminism( none );
-	else if( mode == "over" )
-		result = runOver( none );
-	else if( mode == "onset" )
-		result = runOnset( none );
-	else if( mode == "state" )
-		result = runState( none );
+	if( checks.count( mode ) )
+		result = checks.at( mode ).run( none );
 	else if( mode == "negative" )
 		result = runNegative();
 	else if( mode == "bench" )

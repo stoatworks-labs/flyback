@@ -4,7 +4,7 @@
 # GLSL, rebuild, and require the check that should notice to fail. A harness
 # that passes a mutated plugin is measuring something other than the plugin.
 #
-# Not part of verify.sh (each mutant is a rebuild, ~5 minutes in all); run it
+# Not part of verify.sh (each mutant is an arm64 rebuild of hvtest, a few minutes in all); run it
 # when a check or the code it guards changes. Each mutant is built in its own
 # copy of the tree, so the working tree is never touched.
 #

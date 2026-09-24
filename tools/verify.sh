@@ -41,64 +41,13 @@ reserved_words() {
 	return "$bad"
 }
 
-#---------------------------------------------------------------------------
-# Every shader through a real GLSL compiler. A shader that will not compile is
-# "the plugin does nothing" in a host, with the message in a log file.
-# --target-env=opengl4.5 -fauto-map-locations: glslc targets SPIR-V and would
-# otherwise demand Vulkan's explicit locations. glslc is optional (brew install
-# shaderc); without it this step skips rather than fails.
-#---------------------------------------------------------------------------
-shaders_compile() {
-	local dir bad=0 n=0 shader
-	if ! command -v glslc >/dev/null 2>&1; then
-		printf '   skipped: glslc not installed (brew install shaderc)\n'
-		return 0
-	fi
-	dir="$( mktemp -d )"
-	python3 - "$dir" <<'SHADERS_PY'
-import re, sys, pathlib
-out = pathlib.Path( sys.argv[ 1 ] )
-FILES = [ "source/render/Shaders.cpp" ]
-for f in FILES:
-	text = pathlib.Path( f ).read_text()
-	named = {}
-	for m in re.finditer( r'(\w+)\s*=\s*R"\((.*?)\)"', text, re.S ):
-		named[ m.group( 1 ) ] = m.group( 2 )
-	# Adjacent raw literals, joined: MSVC C2026 caps one literal at ~16 KB, so a
-	# shader that outgrows it is split and has to be rejoined here.
-	for m in re.finditer( r'(\w+)\s*=\s*((?:R"\(.*?\)"\s*){2,});', text, re.S ):
-		named[ m.group( 1 ) ] = "".join( re.findall( r'R"\((.*?)\)"', m.group( 2 ), re.S ) )
-	for name, body in named.items():
-		if body.lstrip().startswith( "#version" ) and "void main" in body:
-			ext = ".vert" if re.search( r"\bgl_Position\s*=", body ) else ".frag"
-			( out / ( name + ext ) ).write_text( body )
-SHADERS_PY
-	for shader in "$dir"/*.vert "$dir"/*.frag; do
-		[ -e "$shader" ] || continue
-		n=$(( n + 1 ))
-		if ! glslc --target-env=opengl4.5 -fauto-map-locations "$shader" -o /dev/null 2>"$dir/err"; then
-			printf '   %s does not compile\n' "$( basename "$shader" )"
-			sed "s|$dir/||; s|^|      |" "$dir/err"
-			bad=$(( bad + 1 ))
-		fi
-	done
-	rm -rf "$dir"
-	if [ "$n" -eq 0 ]; then
-		# Nothing extracted is a failure: the extraction has lost the shaders,
-		# and a check that looks at nothing is worse than none.
-		printf '   no shaders were extracted -- the extraction has gone stale\n'
-		return 1
-	fi
-	[ "$bad" -eq 0 ] && printf '   %d shaders, all compile\n' "$n"
-	return "$bad"
-}
-
 step "GLSL reserved words"
 reserved_words || fail "a GLSL reserved word is used as an identifier"
 pass "none of the reserved words is an identifier"
 
 step "Shaders"
-shaders_compile || fail "a shader does not compile"
+# The same script CI runs (tools/glslc.sh): one copy of the extraction.
+tools/glslc.sh || fail "a shader does not compile"
 pass "every shader compiles"
 
 step "Submodule"
@@ -180,27 +129,108 @@ check_bundle "Flyback Over" "com.stoatworks.ffgl.flyback.over" "HV02" "SW Flybac
 
 step "Checks"
 # Every claim the README makes, in the order it makes them. Physics first
-# (engine only, no GPU), then the pixel checks.
-for check in laplace dimension ladder tesla vdg kirchhoff light exposure determinism over onset defaults names state; do
+# (engine only, no GPU), then the pixel checks at their development rasters.
+run_check() {
+	local log
 	log="$( mktemp )"
-	if "$BUILD/hvtest" "--$check" >"$log" 2>&1; then
+	if "$BUILD/hvtest" "$@" >"$log" 2>&1; then
 		grep -E '^  (ok|FAIL) ' "$log" | sed 's/^/ /'
-		pass "hvtest --$check"
+		pass "hvtest $*"
 	else
 		cat "$log"
-		fail "hvtest --$check"
+		fail "hvtest $*"
 	fi
 	rm -f "$log"
+}
+for check in laplace dimension ladder tesla vdg kirchhoff light exposure determinism over onset defaults names state; do
+	run_check "--$check"
+done
+
+step "Pixel checks at 320x180 (CI's raster)"
+# Every check that touches a pixel or the GPU, again at 320x180, with its
+# negative controls there too. The physics checks have no raster to change.
+for check in light exposure determinism over onset state; do
+	run_check "--$check" --size 320x180
 done
 
 step "Negative controls"
 # Every check, against a deliberately wrong model, must FAIL. A check that
-# cannot fail is not a check.
+# cannot fail is not a check. Once at the development rasters, once at 320x180.
+for size in "" "320x180"; do
+	log="$( mktemp )"
+	if [ -n "$size" ]; then set -- --size "$size"; else set --; fi
+	"$BUILD/hvtest" --negative "$@" >"$log" 2>&1 || { grep -E 'negative control|PASSED against|undetected' "$log"; fail "a negative control went undetected${size:+ at $size}"; }
+	grep -E 'wrong models' "$log" | sed 's/^/ /'
+	rm -f "$log"
+	pass "every wrong model is caught${size:+ at $size}"
+done
+set --
+
+step "Offline (what CI runs without a GL context)"
+# CI's own selector, run here too so it cannot rot: every check the one table
+# in hvtest's main() marks as needing no GL, and their negative controls.
 log="$( mktemp )"
-"$BUILD/hvtest" --negative >"$log" 2>&1 || { grep -E 'negative control|PASSED against|undetected' "$log"; fail "a negative control went undetected"; }
-grep -E 'failed [0-9]+ checks?, as it must|wrong models' "$log" | sed 's/^/ /'
+"$BUILD/hvtest" --offline >"$log" 2>&1 || { cat "$log"; fail "hvtest --offline"; }
+grep -E '^  ran:|NOT run|^  ##   --' "$log" | sed 's/^/ /'
 rm -f "$log"
-pass "every wrong model is caught"
+pass "hvtest --offline"
+
+#---------------------------------------------------------------------------
+# --pipe, in the fleet's frame format. Two and a half frames in must be exactly
+# two frames out and a clean exit -- a partial frame is the end of the stream,
+# never a frame -- and a cue naming no parameter must be refused rather than
+# silently doing nothing to a take. Through the effect (--effect), the only
+# path that reads input frames.
+#---------------------------------------------------------------------------
+step "pipe"
+HVTEST="$BUILD/hvtest"
+frame=$(( 64 * 36 * 4 ))
+raw=$( mktemp ); cues=$( mktemp )
+head -c $(( frame * 5 / 2 )) /dev/zero > "$raw"
+set +e
+got=$( "$HVTEST" --pipe --effect --size 64x36 < "$raw" 2>/dev/null | wc -c | tr -d ' '; exit "${PIPESTATUS[0]}" )
+status=$?
+set -e
+if [ "$status" -eq 0 ] && [ "$got" = "$(( frame * 2 ))" ]; then
+	pass "2.5 frames in, exactly 2 frames out, clean exit"
+else
+	fail "2.5 frames in gave $got bytes out (want $(( frame * 2 ))), exit $status"
+fi
+# Read from a file, not a pipe: a writer killed by SIGPIPE would fail the
+# pipeline whatever hvtest did, and the refusal would pass for the wrong reason.
+printf '0 No Such Control 0.5\n' > "$cues"
+set +e
+"$HVTEST" --pipe --effect --size 64x36 --script "$cues" < "$raw" >/dev/null 2>&1
+status=$?
+set -e
+if [ "$status" -eq 2 ]; then
+	pass "a cue naming no parameter is refused (exit 2)"
+else
+	fail "a cue naming no parameter gave exit $status, not 2"
+fi
+# A reader that hangs up early (`| head -c 1`, ffmpeg dying) must end the run
+# with exit 1 and a message, not SIGPIPE's silent 141.
+head -c $(( frame * 20 )) /dev/zero > "$raw"
+set +e
+"$HVTEST" --pipe --effect --size 64x36 < "$raw" 2>/dev/null | head -c 1 >/dev/null
+status=${PIPESTATUS[0]}
+set -e
+if [ "$status" -eq 1 ]; then
+	pass "a closed stdout ends the run with exit 1, not SIGPIPE"
+else
+	fail "a closed stdout gave exit $status, not 1"
+fi
+# And the source's --film, which reads nothing and writes until told to stop.
+set +e
+"$HVTEST" --film 20 --size 64x36 2>/dev/null | head -c 1 >/dev/null
+status=${PIPESTATUS[0]}
+set -e
+if [ "$status" -eq 1 ]; then
+	pass "--film into a closed stdout ends with exit 1, not SIGPIPE"
+else
+	fail "--film into a closed stdout gave exit $status, not 1"
+fi
+rm -f "$raw" "$cues"
 
 step "Dead controls"
 python3 tools/sweep.py --build "$BUILD" || fail "a control is dead or barely alive"
