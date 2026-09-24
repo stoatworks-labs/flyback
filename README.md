@@ -141,7 +141,7 @@ It has **never been loaded into Resolume**. `oxbow probe` reads both bundles
 the way a host does and finds `SW Flyback` / `HV01` / source and
 `SW Flyback Over` / `HV02` / effect. `oxbow selftest` instantiates each through
 the host's own path and renders. Nothing else has run it. There is a
-[user guide](docs/USER-GUIDE.md); no OpenFX port and no browser demo. It has only been built and measured on
+[user guide](docs/USER-GUIDE.md) and a [browser demo](https://flyback-demo.stoatworks-labs.com/); no OpenFX port. It has only been built and measured on
 macOS (Apple Silicon, M4 Max). The Windows build is in CI and has never run.
 
 What is measured, on this machine:
@@ -209,6 +209,17 @@ What is **not** verified, and is the honest limit of this release:
   corona is charged against the belt (C dV/dt = I − G(V − V_c)), but G is
   derived to first order in space charge and the rough-sphere factor is
   borrowed from Peek's cables (AGENTS.md).
+
+## Browser demo
+
+**<https://flyback-demo.stoatworks-labs.com/>** — both plugins, all five
+machines, in a browser. It is not the plugin. The light path is the plugin's
+own GLSL, copied unedited (`demo/tools/check_shaders.py`, run by
+`tools/verify.sh`, fails on any drift). The CPU engine — the Laplace solve, the
+breakdown model, the machines' circuits, the controls — is a hand port to
+JavaScript in `demo/engine.js` that **nothing checks but a reader**. It runs at
+the plugin's own lattice sizes on the page's main thread, not bit-exact, with
+no audio. The page lists every difference.
 
 ## Build
 

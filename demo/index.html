@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flyback — browser demo | Stoatworks Labs</title>
+    <meta name="description" content="Try the Flyback FFGL source and effect for Resolume in your browser: Jacob's ladders, Tesla coils, Van de Graaffs, plasma globes and Lichtenberg figures grown by the dielectric breakdown model. The plugin's own light shaders, ported to WebGL2, driven by a JavaScript port of its Laplace-solving engine." />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./vendor/kit.css" />
+    <link rel="canonical" href="https://flyback-demo.stoatworks-labs.com/" />
+  </head>
+  <body>
+    <main id="demo">
+      <noscript>
+        <p>
+          This demo runs the plugin's shaders and a port of its engine in your
+          browser, so it needs JavaScript and WebGL2. The plugin itself, its
+          source and its downloads are on
+          <a href="https://github.com/stoatworks-labs/flyback">its repository</a>.
+        </p>
+      </noscript>
+    </main>
+
+    <script type="module" src="./plugin.js"></script>
+    <script
+      src="./vendor/support-footer.js"
+      defer
+      data-app="Flyback"
+      data-repo="https://github.com/stoatworks-labs/flyback"
+      data-note="A browser demo of the plugin's light shaders over a port of its CPU engine. Nothing you load here leaves your machine."
+    ></script>
+  </body>
+</html>

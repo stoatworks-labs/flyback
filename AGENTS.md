@@ -325,7 +325,35 @@ Assumed, or not yet done:
   here, but on a slower machine it still eats the frame.
 - **No racing sparks, no corona current, no breakout-point physics** on the
   coil. The globe's glass coupling (held at 0.35) is a model value.
-- **OpenFX port, browser demo, user guide: not done** (not required for 0.1.0).
+- **OpenFX port: not done** (not required for 0.1.0). The browser demo is below.
+
+## The browser demo (2026-09-24)
+
+`demo/` is <https://flyback-demo.stoatworks-labs.com>, built to the fleet's
+`resolume-demo` kit rules. What a reader of it must know:
+
+- **The shaders are the plugin's**, all nine, copied unedited;
+  `demo/tools/check_shaders.py` compares them (and `kGlowWeights`) to
+  `Shaders.cpp` character for character and `tools/verify.sh` runs it.
+- **The CPU half is a port that only a reader checks.** `demo/engine.js`
+  translates Rng, Physics, Lattice (PCG + multigrid), Dbm (Fenwick candidates,
+  quenched disorder, arcs), Tree, all five machines, Controls and Presets, at
+  the plugin's own lattice sizes -- nothing reduced. It is not bit-exact: C++
+  `float` rounds every operation, the port rounds only on a Float32Array
+  store, so a seed grows a discharge of the same model, not the same one. On
+  2026-09-24 its closed forms matched the README (L* 0.1338 m, V_b 189.6 kV,
+  C 18.56 pF, interval 0.3519 s, air 0.171/0/0.829), every readout matched
+  `hvtest --list`, and each preset's frame looked like hvtest's. Change the
+  engine, change the port.
+- **Differences, all said on the page:** the engine runs synchronously on the
+  page's thread (not a worker a frame late); no audio (the Audio buffer, Audio
+  Fires and Audio Drive are absent -- with no spectrum the plugin does the
+  same); Fire is a toggle the page releases; XPOS/YPOS are sliders; no About
+  block; WebGL2 has no CLAMP_TO_BORDER, so the glow levels clamp to edge; Over's
+  mask is a synchronous readPixels, still a frame late; it needs float
+  render, blend and linear filtering, and refuses without them.
+- The Over build strikes into the kit's generated clips (Lights on black
+  first). The Plugin switch is a new instance: engine and history restart.
 
 ## Conventions
 

@@ -50,6 +50,24 @@ step "Shaders"
 tools/glslc.sh || fail "a shader does not compile"
 pass "every shader compiles"
 
+step "Browser demo's shaders"
+# demo/plugin.js carries copies of source/render/Shaders.cpp for the page at
+# flyback-demo.stoatworks-labs.com. A copy that drifts still renders a plausible
+# picture, so the drift has to fail here instead. It checks the shaders only:
+# demo/engine.js is a hand port of the engine that nothing but a reader checks.
+if [ -f demo/tools/check_shaders.py ]; then
+	log="$( mktemp )"
+	if python3 demo/tools/check_shaders.py >"$log" 2>&1; then
+		pass "$( tail -1 "$log" )"
+	else
+		tail -14 "$log"
+		fail "the demo's shaders have drifted from source/render/Shaders.cpp"
+	fi
+	rm -f "$log"
+else
+	printf '   skipped: no demo/\n'
+fi
+
 step "Submodule"
 [[ -f external/ffgl/CMakeLists.txt ]] || fail "FFGL SDK missing -- run: git submodule update --init --recursive"
 pin="$(git -C external/ffgl rev-parse --short=7 HEAD)"

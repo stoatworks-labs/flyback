@@ -78,11 +78,24 @@ the light's accounting.
 - Local repo only: no GitHub remote, no tag, not registered on the website.
 
 ## Not done yet
-- Never loaded into Resolume (oxbow probe + selftest only). No OFX port,
-  browser demo or user guide. Never built on Windows (ci.yml now has a
+- Never loaded into Resolume (oxbow probe + selftest only). No OFX port
+  or user guide. Never built on Windows (ci.yml now has a
   Windows job, pitch's, but the repo has no remote, so it has never run). The
   README's bench table predates the worker thread.
 - `StoatworksAbout.h` and `ATTRIBUTIONS.md` are provisional hand copies (`guide = ""`).
+
+## Browser demo
+- `demo/` is the page at https://flyback-demo.stoatworks-labs.com (Cloudflare
+  Worker `flyback-demo`, a ROUTE on a proxied AAAA 100:: record -- the zone's
+  custom domains are full; `wrangler.toml` says why). Deploy:
+  `cf-run npx wrangler deploy`; `.github/workflows/deploy.yml` redeploys on push
+  to main and checks the live `<head>`.
+- `demo/plugin.js` holds the nine shaders VERBATIM; `demo/tools/check_shaders.py`
+  (in verify.sh) fails on drift. Change `source/render/Shaders.cpp` -> copy it.
+- `demo/engine.js` is a hand port of `source/engine/`, `Controls.cpp` and
+  `Presets.h`. Nothing checks it: change the C++, change the port.
+- `demo/vendor/` is the shared kit: never edit it, re-vendor with
+  `stoatworks-backend/resolume-demo/sync.sh`.
 
 ## Diagnostics
 
