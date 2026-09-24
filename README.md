@@ -2,7 +2,8 @@
 
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
 > (Anthropic), directed and reviewed by a human author. It has **never been
-> loaded into Resolume**. Everything below is measured by an offline harness
+> loaded into Resolume on macOS**; on Windows it loads and renders in Resolume
+> Arena on software rendering (see [Status](#status)). Everything below is measured by an offline harness
 > that drives the real plugin class in a headless GL context, and the engine on
 > its own where a claim needs no GPU. The central claims are measured, not
 > asserted. `hvtest --laplace` holds the potential solver to the coaxial closed
@@ -31,6 +32,38 @@ into the clip (`SW Flyback Over`).
 <sub>The Tesla coil as the plugin starts: an NST coil at 120 bangs a second,
 streamers into the air and one striking the grounded base. Rendered by the
 plugin's offline harness (`hvtest`), not captured from Resolume.</sub>
+
+<!-- downloads:start -->
+
+## Download
+
+**[v0.1.0](https://github.com/stoatworks-labs/flyback/releases/tag/v0.1.0)** — prebuilt for macOS and Windows. Pick your platform:
+
+<details>
+<summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`flyback-0.1.0-macos-universal.dmg`](https://github.com/stoatworks-labs/flyback/releases/download/v0.1.0/flyback-0.1.0-macos-universal.dmg) | 712 KB |
+| Universal (Apple Silicon + Intel) · .zip archive | [`flyback-macos-universal.zip`](https://github.com/stoatworks-labs/flyback/releases/latest/download/flyback-macos-universal.zip) | 641 KB |
+
+</details>
+
+<details>
+<summary><b>Windows</b> — x64</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| x64 · .exe installer | [`flyback-0.1.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/flyback/releases/download/v0.1.0/flyback-0.1.0-windows-x86_64-setup.exe) | 286 KB |
+| x64 · .zip archive | [`flyback-windows-x86_64.zip`](https://github.com/stoatworks-labs/flyback/releases/latest/download/flyback-windows-x86_64.zip) | 347 KB |
+
+</details>
+
+All builds, checksums and release notes: [github.com/stoatworks-labs/flyback/releases](https://github.com/stoatworks-labs/flyback/releases).
+
+macOS builds are signed and notarised and open normally. The Windows builds are unsigned, so SmartScreen warns once.
+
+<!-- downloads:end -->
 
 ## The one idea
 
@@ -135,14 +168,28 @@ coil, and the coil over a test clip through `SW Flyback Over`.</sub>
 
 ## Status
 
-**v0.1.0, 2026-09-23, and honestly early.**
+**v0.1.0, 2026-09-24, and honestly early.**
 
-It has **never been loaded into Resolume**. `oxbow probe` reads both bundles
-the way a host does and finds `SW Flyback` / `HV01` / source and
+It has **never been loaded into Resolume on macOS**. `oxbow probe` reads both
+bundles the way a host does and finds `SW Flyback` / `HV01` / source and
 `SW Flyback Over` / `HV02` / effect. `oxbow selftest` instantiates each through
-the host's own path and renders. Nothing else has run it. There is a
+the host's own path and renders.
+
+**Windows, in Resolume Arena 7.27.1** (win-lab, Mesa llvmpipe, no GPU,
+2026-09-24): a CI build of this source loads from Extra Effects, both plugins
+register with the right id and type, all 54 (source) and 55 (effect) host
+controls match what the plugin declares, both render, and Arena's log stays
+clean: 15 of 15 of the fleet gate's checks, with the audio controls skipped
+(win-lab has no sound device). 33 of the source's controls and 43 of the
+effect's measurably moved the picture. Eight of the source's (Belt Current,
+Gap, Sphere Finish, Origin, Rise Speed, Wind, Target X, Target Y) were
+inconclusive: they act through discharges that come and go between the
+gate's single-frame grabs, and the effect shows the same controls live.
+Software rendering says nothing about a GPU or about speed.
+
+There is a
 [user guide](docs/USER-GUIDE.md) and a [browser demo](https://flyback-demo.stoatworks-labs.com/); no OpenFX port. It has only been built and measured on
-macOS (Apple Silicon, M4 Max). The Windows build is in CI and has never run.
+macOS (Apple Silicon, M4 Max); the Windows build is MSVC's, from CI.
 
 What is measured, on this machine:
 
@@ -188,7 +235,7 @@ engine plus GPU, is about 18 ms under load.
 
 What is **not** verified, and is the honest limit of this release:
 
-- **Never in a host.** How 53 parameters in thirteen groups present, whether
+- **Never in a host on macOS.** How 53 parameters in thirteen groups present, whether
   Resolume's clock arrives in seconds or milliseconds (it is voted on), and
   what its FFT bins really are.
 - **The engine runs on a worker thread, one frame late.** Each frame draws
