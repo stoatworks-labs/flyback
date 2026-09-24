@@ -111,12 +111,14 @@ enum ParamId : unsigned int
 	PT_ROTATION,
 
 	// The Stoatworks About block: one text line, then a button per link.
-	// Provisional (guide = ""), so three buttons; Flyback.cpp static_asserts
+	// Generated: a guide, a page, the source and support, so four buttons;
+	// Flyback.cpp static_asserts
 	// the run against StoatworksAbout.h.
 	PT_ABOUT_TEXT,
 	PT_ABOUT_BUTTON_1,
 	PT_ABOUT_BUTTON_2,
 	PT_ABOUT_BUTTON_3,
+	PT_ABOUT_BUTTON_4,
 	PT_COUNT
 };
 
