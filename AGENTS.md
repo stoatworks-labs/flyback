@@ -32,9 +32,10 @@ energy to the frame's pixels.
     source/Presets.h          one preset per machine (override model)
     source/Flyback.*          the plugin: params, clock, audio, Over readback
     source/{Source,Effect}Plugin.cpp   the two registrations, one per bundle
-    tools/hvtest/             the harness: checks, --negative, --bench, --film/--pipe
+    tools/hvtest/             the harness: checks, --negative, --offline, --bench, --film/--pipe
     tools/sweep.py            no control is silently dead
     tools/mutate.sh           one-character mutants must be caught
+    tools/glslc.sh            every shader through glslc (verify.sh and CI)
     tools/verify.sh           all of it
 
 ## Decisions taken without asking
@@ -127,10 +128,16 @@ energy to the frame's pixels.
   spent the budget crawling along the glass. Filament count is 2 + V_oc / 3.5 kV.
 - **The Lichtenberg figure grows over 3 s and stays lit.** That is staging; a
   real one forms in nanoseconds and is dark afterwards. README says so.
-- **The engine runs on the render thread.** A worker thread would need the next
-  frame's time before the host gives it. Pipelining a frame late was possible
-  but not done: mean engine cost is 1–5.8 ms and the worst frame 11–12 ms
-  (the globe).
+- **The engine runs on a worker thread, one frame late** (64c21d2; this
+  entry said "render thread" until 2026-09-24). A worker cannot run ahead,
+  because it would need the next frame's time before the host gives it, so it
+  is pipelined: `ProcessOpenGL` for frame n waits for the step started at
+  n-1, draws it, and submits frame n's. The engine sees the same calls in the
+  same order as synchronously, so `--determinism` requires the worker's
+  frames to equal the synchronous ones one frame earlier, bit for bit. Cost:
+  the picture is a frame behind the clock, and the first frame shows the
+  apparatus with no light. Mean engine cost is 1–5.8 ms, the worst 11–12 ms
+  (the globe). The README's bench table predates this change.
 - **Provisional About/ATTRIBUTIONS** hand copies with `guide = ""`, as in the
   rest of the unreleased tranche. `sync-about.py --only flyback` will replace
   them once flyback is registered.
@@ -226,28 +233,52 @@ load average at 13, put three machines at 11–12 GPU ms at 4K. Run alone they
 were 2.6–3.1 ms. `--bench` prints the load average, and the README's table is
 from a quieter run (load ~8).
 
-## Every numeric check: its tolerance, and another rasteriser or raster?
+## Would this hold on another rasteriser, at another raster?
 
-| check | bound | why that number | another rasteriser / raster |
+One row per check. "Rasters" is where it runs: its development raster(s), and
+the 320x180 pass (`--size 320x180`, CI's raster, run by `tools/verify.sh` with
+its negative controls). Every pixel check held at 320x180 on the first run, so
+none needs a "cannot hold" note. Tolerances are derived (a float ULP, a lattice
+step, a frame, a kernel's sampling error), never fitted to what this Mac printed.
+
+| check | bound | why that number | rasters | another rasteriser? |
+| --- | --- | --- | --- | --- |
+| `--laplace` | per site, h·(\|ln(r/R2)\|/R1 + \|ln(r/R1)\|/R2)/L² + solver residual | a staircase electrode's effective radius is uncertain by one lattice step; that times the profile's sensitivity to each radius | none: a lattice in metres, at two steps (10.4 and 5.2 mm), where the bound scales with h. `--offline` | no pixels: holds on any GPU, or none |
+| `--dimension` | 1.70 ± 0.05; η = 0 > 1.9; η = 6 < 1.25; monotonic | the spec's and literature's band, and 3 SE on the DLA reference | none (engine only). `--offline` | no rasteriser enters. Floating-point order could change one site's choice; the statistic would not notice |
+| `--ladder` | L* to one lattice step (the column measured on a polyline refined to h/4); climb time to one frame | the arc cannot be located more finely than the lattice it lives on; the spec's "± one frame" | none (metres and seconds). `--offline` | raster-independent by construction |
+| `--tesla` | bang count exact; lengths at 3 SE, the SE widened by √(τ·BPS) for bangs sharing channel | a clock is exact; the memory claim is statistical | none (engine only). `--offline` | no rasteriser enters |
+| `--vdg` | polished interval to 1e-9 s; corona interval to dt/(2e)·(V∞−V_c)/(V∞−V_b) + 1.125 dt²/τ; rough equilibrium to 1e-9 V_b; images to 1e-9 V at the surfaces | the belt alone integrates exactly; backward Euler's global error on a linear decay, the step straddling V_c, the linear read of the crossing; BE's fixed point is the ODE's; the image series converges to 1e-14 of the first charge | none (engine only). `--offline` | no rasteriser enters |
+| `--kirchhoff` | 8 × 2 × 2^-24 relative | float currents, at most 8 children per node, one rounding each | none (engine only). `--offline` | no rasteriser enters |
+| `--defaults`, `--names` | exact | registration facts | none. `--offline` | no pixels |
+| `--light` | 2·2e^(−2π²σ²) + J/6 + 1.5e-7 + (stores+1)·16·2^-24, σ = 0.8 px (≈ 4e-5) | Poisson summation of the kernel at its narrowest; A&S erf; float32 stores, worst case | 640×360 and 1920×1080 (worst 1.9e-5); **320×180: 2.4e-5 and 1.7e-5**, the same bound, because σ is in pixels at its narrowest at every raster and the glow's octaves are placed in the frame, not in pixels | another rasteriser moves pixel centres, which the Poisson bound covers at any phase. Apple's software renderer steps interpolants by ~1e-5 relative (inside GL 4.1 §2.1.1); that is not in the bound, and this check has never run there (CI does not run it). A GPU storing float32 with less precision would need its own term |
+| `--exposure` | event counts exact; each frame's pixel light within 1% of its events' | a spark is in a window or it is not; 1% guards only which frame the light is in, which `--light` holds to 4e-5 | 480×270 and 1280×720; **320×180: 95 of 95 at 360°, 48 of 95 at 180°, pixels agree in all 240 frames** | the frame a spark lands in is from the clock, not the rasteriser |
+| `--determinism` | bit-identical | same program, same inputs | 480×270; **320×180: bit-identical, worker = synchronous one frame late, all three machines** | holds on another GPU run against itself; not across GPUs (float order), and it does not claim to |
+| `--over` | ≥ 25% and ≥ 10× chance into the disc; none into it when black | chance is the disc's share of the frame; 10× is a margin a working ground clears and a random strike cannot | 640×360; **320×180: 600 of 600 into the disc, 152 of 152 to the coil's grounds when black** | the clip is thresholded onto a 160-wide mask whatever the raster, and strikes are counted in scene metres to one lattice step |
+| `--onset` | exact | a detector fires or does not | 320×180 (its development raster; also run with `--size 320x180`) | no pixels are read |
+| `--state` | exact | GL state is equal or it is not | 320×180 (as above); the viewport it hands over is the raster's | this driver only; state restoration is API, not raster |
+| `--pipe` / `--film` (verify.sh) | exact byte counts and exit codes | 2.5 frames in → 2 out, exit 0; unknown cue → exit 2; closed stdout → exit 1 (SIGPIPE ignored) | 64×36 | not a pixel check |
+
+Every physics and pixel check above has a wrong model in `--negative` (14 in
+all: two each for ladder, tesla and vdg), and each fails as it must at the
+development rasters and at 320x180. `--state`, `--defaults` and `--names` have
+none: they compare API facts, not a model.
+
+### The recorded mutation (the harness drives the GLSL it ships)
+
+`tools/mutate.sh` changes one character of the shipped source in a copy of the
+tree, rebuilds `hvtest`, and requires the named check to fail. Two of its nine
+mutants change the shipped GLSL in `source/render/Shaders.cpp`:
+
+| file | original | mutant | caught by |
 | --- | --- | --- | --- |
-| `--laplace` | per site, h·(\|ln(r/R2)\|/R1 + \|ln(r/R1)\|/R2)/L² + solver residual | a staircase electrode's effective radius is uncertain by a lattice step; that times the profile's sensitivity to each radius | no pixels: holds on any GPU. Run at two lattice steps (10.4 and 5.2 mm), where the bound scales with h |
-| `--dimension` | 1.70 ± 0.05; η = 0 > 1.9; η = 6 < 1.25; monotonic | the spec's and literature's band, and 3 SE on the DLA reference | engine only, lattice in metres: no rasteriser or raster enters. Floating-point order could change one site's choice; the statistic would not notice |
-| `--ladder` | L* to one lattice step (the column is measured on a polyline refined to h/4); climb time to one frame | the arc cannot be located more finely than the lattice it lives on; the spec's "± one frame" | engine only, metres and seconds: raster-independent by construction |
-| `--tesla` | bang count exact; lengths compared at 3 SE, the SE widened by √(τ·BPS) for the correlation between bangs sharing channel | a clock is exact; the memory claim is statistical | engine only |
-| `--vdg` | polished interval to 1e-9 s; corona interval to dt/(2e)·(V∞−V_c)/(V∞−V_b) + 1.125 dt²/τ; rough equilibrium to 1e-9 V_b; images to 1e-9 V at the surfaces | the belt alone is integrated exactly; backward Euler's global error on a linear decay, the step straddling V_c, and the linear read of the crossing; BE's fixed point is the ODE's; the image series converges to 1e-14 of the first charge | engine only |
-| `--kirchhoff` | 8 × 2 × 2^-24 relative | float currents, at most 8 children per node, one rounding each | engine only |
-| `--light` | 2·2e^(−2π²σ²) + J/6 + 1.5e-7 + (stores+1)·16·2^-24, σ = 0.8 px | Poisson summation of the kernel at its narrowest; A&S erf; float32 stores worst-case | a pixel check, run at 640×360 and 1920×1080. Another rasteriser changes where pixel centres fall, which the Poisson bound already covers at any phase. A GPU that stored float32 with less precision would need its own term |
-| `--exposure` | exact (event counts); pixel light within 1% | a spark is in a window or it is not; 1% only guards the pixel sum, which `--light` holds tighter | two rasters (480×270, 1280×720); the frame a spark lands in is from the clock, not the rasteriser |
-| `--determinism` | bit-identical | same program, same inputs | would hold on another GPU run against itself; not across GPUs (float order), and it does not claim to |
-| `--over` | ≥ 25% and ≥ 10× chance into the disc; none into it when black | chance is the disc's share of the frame; 10× is a margin a working ground clears easily and a random strike cannot (measured 100%) | through the GPU threshold of a 160-wide mask, so raster-independent in the mask; one raster (640×360) |
-| `--onset` | exact | a detector fires or does not | no pixels |
-| `--names`, `--defaults` | exact | registration facts | no pixels |
-| `--state` | exact | GL state is equal or it is not | this driver only; state restoration is API, not raster |
+| `Shaders.cpp` (the segment kernel's normal CDF) | `return 0.5 * ( 1.0 + erfAS( ... ) );` | `return 0.6 * ...` | `--light` |
+| `Shaders.cpp` (the core/glow mix) | `light = ( 1.0 - Glow ) * e + Glow * g;` | `( 1.0 + Glow )` | `--light` |
 
-Every one of these has a wrong model in `--negative` (13 in all), and each
-fails as it must. `tools/mutate.sh` changes one character in the shipped
-engine or GLSL for seven of them (the CDF, the glow mix, L*, an image charge,
-the Laplacian, the growth field, the interrupter) and all seven are caught.
+The other seven are the engine's: L*'s linear coefficient (`--ladder`), an
+image charge's side (`--vdg`), the Laplacian's centre weight (`--laplace`), the
+growth field's sign (`--dimension`), the interrupter's beat (`--tesla`), the
+corona conductance and the corona's drain voltage (`--vdg`). Last run
+2026-09-24: 9 mutants, 9 caught.
 
 ## What is genuinely verified, and what is assumed
 
@@ -283,10 +314,15 @@ Assumed, or not yet done:
   whether FF_TYPE_XPOS/YPOS pairs show as pads, and what the FFT bins are.
 - **Windows never built.** RGBA32F additive blending is standard on DX11-class
   hardware but untested here.
-- **The GPU-less CI runner** would fail the pixel checks (it has no GL);
-  `ci.yml` only builds, as the fleet's does.
-- **No worker thread.** The engine's worst frame is 12 ms (globe) on this CPU.
-  On a slower machine that eats the frame.
+- **The GPU-less CI runner** cannot create an accelerated GL context, so
+  `ci.yml` runs `hvtest --list`, `hvtest --offline` (the physics and
+  registration checks and their negative controls, no GL context) and
+  `tools/glslc.sh --require`. The pixel checks, and anything only a real driver
+  catches, run in `tools/verify.sh` on a Mac with a GPU and nowhere else. The
+  repo has no remote, so the workflow has never actually run.
+- **The worker thread has never met a host.** The engine's worst step is
+  12 ms (globe) on this CPU; overlapped with the host's work that is hidden
+  here, but on a slower machine it still eats the frame.
 - **No racing sparks, no corona current, no breakout-point physics** on the
   coil. The globe's glass coupling (held at 0.35) is a model value.
 - **OpenFX port, browser demo, user guide: not done** (not required for 0.1.0).

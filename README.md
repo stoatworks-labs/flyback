@@ -13,10 +13,11 @@
 > and matched by the closed form to 1e-9 m. `--vdg` times every spark to
 > C·V_b/I_belt, with V_b from image charges that the harness checks against
 > both spheres' boundary conditions. `--light` requires each frame to hold the
-> event's energy × efficiency to 4e-5, however many branches share it.
+> event's energy × efficiency to within a derived bound of 4.1e-5 (worst
+> measured 1.9e-5; 2.4e-5 at 320×180), however many branches share it.
 > `hvtest --negative` re-runs every check against a deliberately wrong model
 > and fails if any of them *passes*. `tools/mutate.sh` changes one character of
-> the shipped engine or GLSL and requires a check to notice (7 of 7 do). A
+> the shipped engine or GLSL and requires a check to notice (9 of 9 do). A
 > control sweep fails if any parameter turns out to do nothing (see
 > [Status](#status)).
 
@@ -115,8 +116,12 @@ streamer violet. The glow redistributes light and never adds any.
   the brightest thing in frame.
 - **Layout:** Position X/Y, Scale and Rotation.
 
-The shared controls are relative to each machine's nominal, so switching
-Machine alone gives each one looking like itself. The host panel shows the
+The shared controls (Voltage, Impedance, Branching, Detail, Memory, Reach,
+Efficiency, Scale) are relative to each machine's nominal, so switching Machine
+alone keeps each one's geometry, branching and memory looking like itself.
+Supply and Gas are not: switching Machine leaves them where they are set (the
+globe's preset uses the Flyback supply and Neon-Xenon, the Lichtenberg's ZVS,
+the rest NST and air), so for a machine's usual supply and gas pick its preset. The host panel shows the
 physical value: kV, MΩ, η, ms, BPS, µA.
 
 | | | |
@@ -149,14 +154,15 @@ What is measured, on this machine:
 | Tesla coil | **7200** bangs in a minute at 120 BPS, and **2250** at 37.5. Mean streamer **0.254/0.255 m** at 4 and 8 BPS (flat), then **0.365, 0.820, 1.072 m** at 60, 120 and 240 BPS with τ = 20 ms |
 | Van de Graaff | polished: every interval **C·V_b/I** = 0.3519 s to 1.3e-11 s (V_b 189.6 kV, C 18.56 pF), and on screen to a frame. Half the belt gives 0.7038 s. 33 image charges hold both spheres to 5e-15 V. In the corona window (m 0.998539): every interval the charging ODE's closed form **0.352393 s** to 8.1e-6 s (bound 9.4e-6), 0.52 ms from the corona-free value. Rough (m 0.95, 0.82): no sparks, held at V_c + I/G to 1e-9 V_b |
 | Kirchhoff | every node of every tree, all five machines: worst \|in−out\|/in **1.1e-7**, free tips equal |
-| light | frame total against energy × efficiency at 640×360 and 1920×1080, with 5 and 24 free tips: worst **1.9e-5**, inside a bound of 4.1e-5 derived from the kernel's sampling and float32 |
-| exposure | at 360°, 95 of 95 bangs each in one frame. At 180°, 48 of 95, none twice. The pixels agree with the clock in every frame, at two rasters |
+| light | frame total against energy × efficiency at 640×360 and 1920×1080, with 5 and 24 free tips: worst **1.9e-5**, inside a bound of 4.1e-5 derived from the kernel's sampling and float32. At 320×180, CI's raster: **2.4e-5**, the same bound |
+| exposure | at 360°, 95 of 95 bangs each in one frame. At 180°, 48 of 95, none twice. The pixels agree with the clock in every frame, at two rasters and at 320×180 |
 | determinism | 90 frames bit-identical twice with one seed, different with another (coil, ladder, globe) |
 | Over | a bright disc in a black clip takes **600 of 600** strikes (chance is 1.8%). A black clip sends all 152 to the coil's grounds |
 | audio | the first hit after a fresh instance, and after the clock jumps back, fires |
 | GL state | viewport, vertex array, program, units, framebuffer, blend, scissor, clear colour and buffers, as the host left them |
-| negative controls | **13** wrong models, **all 13** detected |
-| mutation | **7** one-character mutants of the engine and the GLSL, **all 7** caught |
+| 320×180 | every pixel check (light, exposure, determinism, Over, onset, GL state) and its negative controls pass again at CI's raster |
+| negative controls | **14** wrong models, **all 14** detected, at the development rasters and at 320×180 |
+| mutation | **9** one-character mutants of the engine and the GLSL (2 in the GLSL, caught by `--light`), **all 9** caught |
 | dead controls | **48** parameters, all live where they apply |
 
 Render cost (`hvtest --bench`; GPU time by `GL_TIME_ELAPSED`, engine CPU time
@@ -170,7 +176,10 @@ per frame, on a machine shared with other work while it ran):
 | Plasma Globe | 0.76 | 1.04 | 2.88 | 5.0 | 11.0 |
 | Lichtenberg | 0.73 | 1.25 | 3.09 | 1.3 | 2.5 |
 
-These come from a run with the load average near 8. The same bench inside
+These come from a run with the load average near 8, and **predate the worker
+thread** (64c21d2): "engine" was then time on the render thread. `--bench` now
+runs the worker paced at 60 fps and reports the render thread's time and the
+worker's time per step separately; the table has not been re-measured since. The same bench inside
 `tools/verify.sh`, with more running beside it, measured GPU 1.6–2.4 ms at
 720p, 2.1–2.8 at 1080p and 5.1–5.8 at 4K, and a worst engine frame of 12.3 ms
 (the globe). Treat the table as a floor and those as a ceiling. Either way a
@@ -182,10 +191,13 @@ What is **not** verified, and is the honest limit of this release:
 - **Never in a host.** How 53 parameters in thirteen groups present, whether
   Resolume's clock arrives in seconds or milliseconds (it is voted on), and
   what its FFT bins really are.
-- **The engine runs on the render thread.** Its worst frame is 11–12 ms (the
-  globe), inside a 60 fps frame at 1080p, but it is CPU time the host does not
-  get back, and at 4K under load a globe frame can pass 16.7 ms. A worker
-  thread is not done.
+- **The engine runs on a worker thread, one frame late.** Each frame draws
+  the engine step started the frame before, so the picture is one frame
+  behind the clock, and the very first frame shows the apparatus with no
+  discharge light. The render thread waits only for whatever of the engine's
+  step (worst 11–12 ms, the globe) did not overlap the host's own work. It is
+  bit-exact against the synchronous engine one frame earlier
+  (`--determinism`), but has never run inside a host.
 - **Some constants are models, not measurements.** The low-current Ayrton
   constants (D = 750 W/m sets the ladder's height), the streamer propagation
   field, the glass's coupling in the globe, a toroid treated as a sphere, and
@@ -193,8 +205,10 @@ What is **not** verified, and is the honest limit of this release:
   from memory.
 - **The Lichtenberg figure grows over three seconds and stays lit.** A real one
   forms in nanoseconds and is a dark fossil afterwards. That is staging.
-- **No racing sparks down the Tesla coil's secondary**, and the Van de Graaff's
-  corona is drawn but not charged against the belt.
+- **No racing sparks down the Tesla coil's secondary.** The Van de Graaff's
+  corona is charged against the belt (C dV/dt = I − G(V − V_c)), but G is
+  derived to first order in space charge and the rough-sphere factor is
+  borrowed from Peek's cables (AGENTS.md).
 
 ## Build
 
@@ -224,9 +238,12 @@ The offline harness renders the real plugin class headlessly:
     ./build/hvtest --over           strikes go into the picture
     ./build/hvtest --onset          the first hit fires
     ./build/hvtest --negative       every check against a wrong model
+    ./build/hvtest --offline        the checks that need no GL context (what CI runs)
+    ./build/hvtest --light --size 320x180   any pixel check at another raster
     ./build/hvtest --bench          GPU and engine cost
     python3 tools/sweep.py          no control is silently dead
     tools/mutate.sh                 one-character mutants must be caught
+    tools/glslc.sh                  every shader through glslc (verify.sh and CI)
     tools/verify.sh                 all of it, from a fresh universal build
 
 Filming uses the fleet's frame format and cue sheets:

@@ -21,13 +21,24 @@ the light's accounting.
 - Set anything by name: `--set "Branching=0.3" --set "Machine=4"`
 - Film: `./build/hvtest --film 960 --size 1280x720 --script docs/demo.cues | ffmpeg -f rawvideo -pix_fmt rgba -s 1280x720 -r 60 -i - -pix_fmt yuv420p demo.mp4`
 - Film a clip through the effect: `ffmpeg -i in.mov -f rawvideo -pix_fmt rgba - | ./build/hvtest --pipe --effect --size WxH [--script cues] | ffmpeg ...`
+  A cue line is `frame  Parameter Name  value` (`#` starts a comment), in the same
+  raw host values as `--set` (0..1 for a slider, the index for an option;
+  `--list` shows them). Values interpolate linearly
+  between a name's cues and hold before the first and after the last, so a step
+  needs two cues a frame apart -- an option index interpolated is a different
+  option on the way; Fire is thresholded at 0.5, so a press is `29 Fire 0 / 30 Fire 1
+  / 31 Fire 0`. Frame *n* is clocked at n / 60 s. An unknown name exits 2 before
+  any frame; a partial frame at EOF ends the stream with exit 0; a frame that
+  fails to render, or a reader that hangs up (`| head -c 1`), exits 1 with a
+  message on stderr (SIGPIPE is ignored, so never a silent 141).
 
 ## Verify
-- Everything: `tools/verify.sh` (a few minutes: reserved words, glslc, the SDK pin, a FRESH universal build, lipo, plugMain, plists, ad-hoc codesign, `oxbow probe` and `selftest` on both bundles, every check, the negative controls, the sweep, the bench)
+- Everything: `tools/verify.sh` (a few minutes: reserved words, glslc, the SDK pin, a FRESH universal build, lipo, plugMain, plists, ad-hoc codesign, `oxbow probe` and `selftest` on both bundles, every check, every pixel check again at 320x180, the negative controls at both, `--offline`, the pipe's exit codes, the sweep, the bench)
 - Physics, no GPU: `--laplace`, `--dimension`, `--ladder`, `--tesla`, `--vdg`, `--kirchhoff`
-- Pixels, two rasters: `--light`, `--exposure`; also `--determinism`, `--over`, `--onset`, `--state`
+- Pixels, at their development rasters: `--light` (640x360 + 1920x1080), `--exposure` (480x270 + 1280x720), `--determinism` (480x270), `--over` (640x360), `--onset`, `--state` (320x180). Any of them with `--size WxH` runs at that raster instead; verify.sh adds `--size 320x180`, CI's raster
 - Registration: `--defaults` (preset 1 = the constructor), `--names` (16 bytes, unique)
-- The checks can fail: `--negative` (13 wrong models); `tools/mutate.sh` (7 one-character mutants, ~1 min, not in verify.sh)
+- The checks can fail: `--negative` (14 wrong models; takes `--size`); `tools/mutate.sh` (9 one-character mutants, 2 of them in the shipped GLSL, a few minutes, not in verify.sh)
+- No GL context (CI): `./build/hvtest --offline` -- the checks main()'s one table marks as needing no GL, with their negative controls; it says loudly that the pixel checks did not run. Shaders without a driver: `tools/glslc.sh` (verify.sh and CI both call it)
 - No dead controls: `python3 tools/sweep.py` (each control swept on the machine it belongs to)
 - Cost: `./build/hvtest --bench [--machine N] [--set ...]`
 
@@ -48,8 +59,11 @@ the light's accounting.
   Efficiency, Scale are trims around each machine's / supply's nominal
   (`Controls.cpp`, `NominalFor`). Presets are an OVERRIDE (graticule's model):
   `FlybackPlugin::Effective` lays the row over the params at read time.
-- The engine runs on the render thread (`Engine::Advance` in `ProcessOpenGL`);
-  its time is `Engine::LastMillis()`.
+- The engine runs on a worker thread, one frame late: `ProcessOpenGL` for
+  frame n collects the step started at n-1, draws it, and submits frame n's
+  (`Flyback.h`, "The engine's worker thread"). The first frame has no light.
+  The harness runs it synchronously (`SetSynchronousForTest`) except in
+  `--determinism`'s worker half and `--bench`.
 - Over: the clip is thresholded onto a 160-wide mask and read back through a
   PBO pair, a frame late; bright cells become ground.
 - All ranged host parameters are 0..1, converted in `Controls.cpp`;
@@ -65,8 +79,9 @@ the light's accounting.
 
 ## Not done yet
 - Never loaded into Resolume (oxbow probe + selftest only). No OFX port,
-  browser demo or user guide. Never built on Windows. The engine is not on a
-  worker thread.
+  browser demo or user guide. Never built on Windows (ci.yml now has a
+  Windows job, pitch's, but the repo has no remote, so it has never run). The
+  README's bench table predates the worker thread.
 - `StoatworksAbout.h` and `ATTRIBUTIONS.md` are provisional hand copies (`guide = ""`).
 
 ## Diagnostics
