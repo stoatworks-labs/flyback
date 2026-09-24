@@ -119,9 +119,9 @@ spectral lines through the CIE observer. A channel moves toward a 6500 K
 blackbody as its current nears an ampere, so a strike is white-hot and a
 streamer violet. The glow redistributes light and never adds any.
 
-[![Flyback — Tesla coils, Jacob's ladders and plasma globes, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=jyy29bOI0NA)
+[![Flyback — Tesla coils, Jacob's ladders and plasma globes, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=BV5pbQ7ngIs)
 
-*[Watch it](https://www.youtube.com/watch?v=jyy29bOI0NA) — 83 seconds:
+*[Watch it](https://www.youtube.com/watch?v=BV5pbQ7ngIs) — 83 seconds:
 the Jacob's ladder climbing, snapping and restriking; the Tesla coil's
 streamers lengthening as BPS rises; a Van de Graaff sparking every C·V/I and
 a rough sphere holding in corona; a plasma globe and a finger; a Lichtenberg
