@@ -3,43 +3,84 @@
 #       | ffmpeg -f rawvideo -pix_fmt rgba -s 1280x720 -r 60 -i - -pix_fmt yuv420p demo.mp4
 #
 # Tracks are held before their first key and interpolated BETWEEN keys, so a
-# dropdown changes on a pair of keys a frame apart (`179 Preset 1 / 180
-# Preset 2`), and a button press is three keys (`29 Fire 0 / 30 Fire 1 /
+# dropdown changes on a pair of keys a frame apart (`179 Machine 1 / 180
+# Machine 0`), and a button press is three keys (`29 Fire 0 / 30 Fire 1 /
 # 31 Fire 0`) -- without the key before, the value would ramp and cross 0.5
 # halfway there.
+#
+# Everything runs on Preset 0 (Custom). A Preset other than Custom is laid
+# over the controls at read time (source/Presets.h) and its row includes BPS,
+# Belt Current, Branching, Gas and Sphere Finish, so a sweep of any of them
+# under a preset changes nothing on screen (this file's BPS sweep did exactly
+# that until it moved to Custom). Each machine's preset row is copied in by
+# hand instead: Machine, Supply, Glow, Persistence and Gas are the columns
+# that differ between the five rows; every other column is the constructor's
+# default in all of them.
 
-# 0-3 s: the Tesla coil, the interrupter sweeping up from 30 to 400 BPS: the
-# streamers lengthen as the channel stays hot between bangs.
-0    Preset    1
-0    BPS       0.3
-90   BPS       0.3
-170  BPS       0.85
-179  Preset    1
+0    Preset       0
 
-# 3-6 s: the Jacob's ladder, climbing, bowing, snapping at L*, restriking.
-180  Preset    2
-359  Preset    2
+# 0-3 s: the Tesla coil (row: Machine 1, Supply NST, Glow 0.45, Persistence
+# 0.30, Air), the interrupter sweeping up from 30 to 400 BPS: the streamers
+# lengthen as the channel stays hot between bangs.
+0    Machine      1
+0    Supply       1
+0    Glow         0.45
+0    Persistence  0.30
+0    Gas          0
+0    BPS          0.3
+90   BPS          0.3
+170  BPS          0.85
+179  BPS          0.85
 
-# 6-9 s: the Van de Graaff, polished: no corona, a spark every C V_b / I. Fired once
-# more by hand at 7.5 s.
-360  Preset    3
-449  Fire      0
-450  Fire      1
-451  Fire      0
-539  Preset    3
+# 3-6 s: the Jacob's ladder (Machine 0, NST, Glow 0.50, Persistence 0.10),
+# climbing, bowing, snapping at L*, restriking. BPS back to the rows' 120.
+179  Machine      1
+180  Machine      0
+180  BPS          0.6078
+179  Glow         0.45
+180  Glow         0.50
+179  Persistence  0.30
+180  Persistence  0.10
 
-# 9-12.5 s: the plasma globe; a finger on the glass at 10.5 s pulls the
+# 6-9 s: the Van de Graaff (Machine 2, NST, Glow 0.50, Persistence 0.40),
+# polished: no corona, a spark every C V_b / I. Fired once more by hand at 7.5 s.
+359  Machine      0
+360  Machine      2
+359  Persistence  0.10
+360  Persistence  0.40
+449  Fire         0
+450  Fire         1
+451  Fire         0
+
+# 9-12.5 s: the plasma globe (Machine 3, Flyback supply, Glow 0.55,
+# Persistence 0.30, neon-xenon); a finger on the glass at 10.5 s pulls the
 # filaments together.
-540  Preset    4
-540  Finger    0
-629  Finger    0
-630  Finger    1
-540  Finger X  0.62
-540  Finger Y  0.78
-749  Preset    4
+539  Machine      2
+540  Machine      3
+539  Supply       1
+540  Supply       2
+539  Glow         0.50
+540  Glow         0.55
+539  Persistence  0.40
+540  Persistence  0.30
+539  Gas          0
+540  Gas          3
+540  Finger       0
+629  Finger       0
+630  Finger       1
+540  Finger X     0.62
+540  Finger Y     0.78
 
-# 12.5-16 s: a Lichtenberg figure growing, and a fresh one at 14.5 s.
-750  Preset    5
-869  Fire      0
-870  Fire      1
-871  Fire      0
+# 12.5-16 s: a Lichtenberg figure (Machine 4, ZVS, Glow 0.40, Persistence
+# 0.30, Air) growing, and a fresh one at 14.5 s.
+749  Machine      3
+750  Machine      4
+749  Supply       2
+750  Supply       0
+749  Glow         0.55
+750  Glow         0.40
+749  Gas          3
+750  Gas          0
+869  Fire         0
+870  Fire         1
+871  Fire         0
