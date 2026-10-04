@@ -17,6 +17,20 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="${1:-$REPO/build-verify}"
 cd "$REPO"
 
+# oxbow, the FFGL test host. It sits beside this repo's checkout -- and from
+# a git worktree `..` is the worktrees folder, not Projects/resolume, so the
+# main checkout is found through git's common dir as well. OXBOW names the
+# binary outright.
+OXBOW_REPO=""
+for candidate in "$REPO/../oxbow" \
+                 "$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")/../oxbow"; do
+	if [ -d "$candidate/build" ]; then
+		OXBOW_REPO="$candidate"
+		break
+	fi
+done
+OXBOW_REPO="${OXBOW_REPO:-$REPO/../oxbow}"
+
 PASSED=0
 step() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 fail() { printf '\033[31mFAIL\033[0m %s\n' "$1"; exit 1; }
@@ -81,7 +95,7 @@ cmake --build "$BUILD" -j"$(sysctl -n hw.ncpu)" >/dev/null
 pass "configured from nothing and built"
 
 step "Bundles"
-OXBOW="${OXBOW:-$HOME/Projects/resolume/oxbow/build/oxbow}"
+OXBOW="${OXBOW:-$OXBOW_REPO/build/oxbow}"
 declared="$( sed -n 's/^[[:space:]]*VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt | head -1 )"
 grep -q "versionFallback = \"v$declared\"" source/StoatworksAbout.h \
 	|| fail "StoatworksAbout.h's versionFallback is not v$declared"
