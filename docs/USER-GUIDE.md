@@ -454,7 +454,9 @@ on a machine shared with other work while it ran.
 | Plasma Globe | 0.76 | 1.04 | 2.88 | 5.0 | 11.0 |
 | Lichtenberg | 0.73 | 1.25 | 3.09 | 1.3 | 2.5 |
 
-These come from a run with the load average near 8. The same bench with more running beside it
+These come from a run with the load average near 8, and they predate the worker thread (commit
+64c21d2), so "engine" there means time on the render thread. I haven't re-measured them since. The
+same bench with more running beside it
 measured GPU 1.6–2.4 ms at 720p, 2.1–2.8 at 1080p and 5.1–5.8 at 4K, and a worst engine frame of
 12.3 ms (the globe). Treat the table as a floor and those as a ceiling. Either way a frame costs
 well under the 16.7 ms of 60 fps at 1080p.
