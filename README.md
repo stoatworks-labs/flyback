@@ -1,37 +1,23 @@
 # flyback
 
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
-> (Anthropic), directed and reviewed by a human author. It has **never been
-> loaded into Resolume on macOS**; on Windows it loads and renders in Resolume
-> Arena on software rendering (see [Status](#status)). Everything below is measured by an offline harness
-> that drives the real plugin class in a headless GL context, and the engine on
-> its own where a claim needs no GPU. The central claims are measured, not
-> asserted. `hvtest --laplace` holds the potential solver to the coaxial closed
-> form within a bound derived from the lattice step. `--dimension` grows
-> breakdown-model clusters and finds the fractal dimension of DLA's class,
-> **1.744** against the estimator's own reading of true DLA, 1.742. `--ladder`
-> puts every arc out at Ayrton's extinction length, found here by bisection
-> and matched by the closed form to 1e-9 m. `--vdg` times every spark to
-> C·V_b/I_belt, with V_b from image charges that the harness checks against
-> both spheres' boundary conditions. `--light` requires each frame to hold the
-> event's energy × efficiency to within a derived bound of 4.1e-5 (worst
-> measured 1.9e-5; 2.4e-5 at 320×180), however many branches share it.
-> `hvtest --negative` re-runs every check against a deliberately wrong model
-> and fails if any of them *passes*. `tools/mutate.sh` changes one character of
-> the shipped engine or GLSL and requires a check to notice (9 of 9 do). A
-> control sweep fails if any parameter turns out to do nothing (see
-> [Status](#status)).
+> (Anthropic), directed and reviewed by a human author. It's **never been loaded into Resolume
+> on macOS**. On Windows it loads and renders in Resolume Arena, on software rendering.
+> Everything else is measured by an offline harness that drives the real plugin class in a
+> headless GL context, or the engine on its own where a claim doesn't need a GPU, and every
+> check is also run against a wrong model to make sure it can tell. The numbers, and the list
+> of what I haven't tried yet, are under [Status](#status).
 
-High-voltage discharges for Resolume Arena/Avenue: a Jacob's ladder, a Tesla
-coil, a Van de Graaff generator, a plasma globe and a Lichtenberg figure. It
-comes as two FFGL plugins, a source (`SW Flyback`) and an effect that strikes
-into the clip (`SW Flyback Over`).
+The high-voltage corner of a science museum, for Resolume Arena and Avenue: a Jacob's ladder, a
+Tesla coil, a Van de Graaff generator, a plasma globe and a Lichtenberg figure. It comes as two
+FFGL plugins, a source (`SW Flyback`) and an effect that strikes into your clip
+(`SW Flyback Over`), and nobody has to stand behind the cage.
 
 ![A Tesla coil firing: violet streamers branching off the toroid into the air, and one white-hot strike down to the grounded base](docs/hero.png)
 
-<sub>The Tesla coil as the plugin starts: an NST coil at 120 bangs a second,
-streamers into the air and one striking the grounded base. Rendered by the
-plugin's offline harness (`hvtest`), not captured from Resolume.</sub>
+<sub>The Tesla coil as it starts up: an NST coil at 120 bangs a second, streamers into the
+air and one striking the grounded base. Rendered by the plugin's offline harness (`hvtest`)
+rather than captured from Resolume.</sub>
 
 <!-- downloads:start -->
 
@@ -69,67 +55,69 @@ macOS builds are signed and notarised and open normally. The Windows builds are 
 
 **Air is an insulator until the field tears it, and where it tears is a
 Laplace problem.** Every discharge grows by the dielectric breakdown model
-(Niemeyer, Pietronero & Wiesmann, 1984). The electrodes and the channel
-already grown are held at their potentials. The potential in the air solves
-Laplace's equation on a lattice sized in metres of scene. The channel then
-extends to a neighbouring site with probability
+(Niemeyer, Pietronero & Wiesmann, 1984). The electrodes, and whatever channel
+has grown so far, are held at their potentials. The potential in the air
+solves Laplace's equation on a lattice sized in metres of scene, and the
+channel then grows to a neighbouring site with probability
 
     p ∝ |∇φ|^η
 
-One exponent decides the look. η = 1 is a Lichtenberg figure. η ≈ 2 to 3 is
-lightning. A large η is a nearly straight arc. Nothing is drawn with a noise
-function. Branching, forking toward the nearest ground and a strike taking the
-short way round are all where the field puts them.
+One exponent decides the look. η = 1 is a Lichtenberg figure, η ≈ 2 to 3 is
+lightning, and a large η is a nearly straight arc. None of it's drawn with a
+noise function. The branching, the forks heading for the nearest ground and a
+strike taking the short way round all happen where the field puts them.
 
-Around that model sit the circuits of the classic machines. Each decides *when*
-the air breaks and *how much energy* the channel carries:
+Around that model sit the circuits of the classic machines, and each one
+decides *when* the air breaks and *how much energy* the channel carries:
 
 - **Jacob's ladder.** The arc obeys Ayrton's equation on a supply with a
   source resistance, so it has an extinction length **L\***, solved in closed
-  form. The hot column rises at the buoyant speed, its roots lag on the rods
-  and it bows. It stretches as the rods diverge, snaps at L\* and restrikes at
-  the bottom. A stiffer supply climbs further.
-- **Tesla coil.** Bangs at the interrupter rate, exactly, as a clock. Each bang
-  grows streamers off the toroid toward the nearest ground. **Channel memory:**
-  a segment stays hot for τ times its share of the current (a thicker channel
-  cools slower). So the next bang re-uses what is still hot, and streamers
-  lengthen with BPS once 1/BPS < τ. A slow interrupter makes short, fresh
-  sparks every time.
+  form (the harness also finds it by bisection, and the two agree to 1e-9 m).
+  The hot column rises at the buoyant speed, its roots lag on the rods and it
+  bows. It stretches as the rods spread, snaps at L\* and restrikes at the
+  bottom. A stiffer supply climbs further.
+- **Tesla coil.** It bangs at the interrupter rate, on the dot, like a clock.
+  Each bang grows streamers off the toroid towards the nearest ground.
+  **Channel memory:** a segment stays hot for τ times its share of the current
+  (a thicker channel cools slower), so the next bang re-uses whatever's still
+  hot, and the streamers get longer with BPS once 1/BPS < τ. A slow interrupter
+  makes short, fresh sparks every time.
 - **Van de Graaff.** The belt charges the sphere at I_belt. The gap breaks when
-  its surface field reaches Peek's value, from the two-sphere image-charge
-  solution, and the spark dumps ½CV². So sparks come every **C·V_b/I_belt**,
-  twice as often at twice the belt current. Sphere Finish sets Peek's surface
-  factor m: a polished sphere (m = 1) has no corona before sparkover, as Peek
-  found. A rough one goes into corona at m·V_b and leaks I_c = G(V − V_c) to
-  the room, G derived from ion drift. G is tens of nA per volt against a belt
-  of microamps, so the corona does not slow the climb so much as stop it: the
-  sphere holds at V_c + I/G, and below V_b it never sparks and glows instead.
+  the sphere's surface field reaches Peek's value, worked out from the
+  two-sphere image-charge solution, and the spark dumps ½CV². So sparks come
+  every **C·V_b/I_belt**, twice as often at twice the belt current. Sphere
+  Finish sets Peek's surface factor m. A polished sphere (m = 1) has no corona
+  before sparkover, as Peek found. A rough one goes into corona at m·V_b and
+  leaks I_c = G(V − V_c) to the room, with G derived from ion drift. G is tens
+  of nA per volt against a belt of microamps, so the corona doesn't so much
+  slow the climb as stop it: the sphere sits at V_c + I/G, and held there below
+  V_b it never sparks, it just glows.
 - **Plasma globe.** Filaments grow from the electrode to the glass one at a
-  time. Each frame each filament's outer part re-forms, so they wander. A
-  finger on the glass is a stronger ground that pulls them together.
+  time. Every frame the outer part of each filament re-forms, so they wander
+  about. A finger on the glass is a stronger ground and pulls them together.
 - **Lichtenberg figure.** The pure model, η = 1, grown from a point or an edge
   until its budget runs out, then held.
 
-**Light, one model for all five.** Current flows in each grown tree by
-Kirchhoff: the trunk carries the most. Radius goes as √I, and emission per
+**Light, one model for all five.** Current flows through each grown tree by
+Kirchhoff, so the trunk carries the most. Radius goes as √I, and emission per
 metre as I²R = I. A frame's light is exactly the event's energy (½CV² for a
-spark, V·I·Δt for an arc) × a luminous efficiency. **A bang split into ten
-branches is not ten times brighter.** Colour comes from each gas's own
-spectral lines through the CIE observer. A channel moves toward a 6500 K
-blackbody as its current nears an ampere, so a strike is white-hot and a
-streamer violet. The glow redistributes light and never adds any.
+spark, V·I·Δt for an arc) × a luminous efficiency, so **a bang split into ten
+branches isn't ten times brighter**. Colour comes from each gas's own spectral
+lines through the CIE observer, and a channel heads towards a 6500 K blackbody
+as its current nears an ampere, which is why a strike is white-hot and a
+streamer violet. The glow moves light around and never adds any.
 
 [![Flyback — Tesla coils, Jacob's ladders and plasma globes, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=BV5pbQ7ngIs)
 
-*[Watch it](https://www.youtube.com/watch?v=BV5pbQ7ngIs) — 83 seconds:
-the Jacob's ladder climbing, snapping and restriking; the Tesla coil's
-streamers lengthening as BPS rises; a Van de Graaff sparking every C·V/I and
-a rough sphere holding in corona; a plasma globe and a finger; a Lichtenberg
-figure; Branching from bush to lightning to arc; the gases; and SW Flyback
-Over striking into Resolume's demo clips. Every frame is the real plugins'
-output: an FFGL plugin has no window, so the footage is rendered by this
-repository's own offline harness (`hvtest --film` and `--pipe`, driven by cue
-sheets) rather than filmed off a screen.*
+*[Watch it](https://www.youtube.com/watch?v=BV5pbQ7ngIs) (83 seconds): the
+Jacob's ladder climbing, snapping and restriking, the Tesla coil's streamers
+getting longer as BPS goes up, a Van de Graaff sparking every C·V/I and a rough
+sphere sitting in corona, a plasma globe and a finger, a Lichtenberg figure,
+Branching from bush to lightning to arc, the gases, and SW Flyback Over
+striking into Resolume's demo clips. It's all the plugins' own output. An FFGL
+plugin doesn't have a window to film, so the footage comes from this repo's
+offline harness (`hvtest --film` and `--pipe`, driven by cue sheets) rather
+than a screen recording.*
 
 ## Controls
 
@@ -148,9 +136,9 @@ sheets) rather than filmed off a screen.*
 - **Plasma Globe:** Globe Size, and Finger with Finger X/Y.
 - **Lichtenberg:** Origin (a point or the bottom edge).
 - **Audio:** Audio (Resolume's FFT buffer). Audio Fires turns each onset into a
-  bang or a spark (a singing Tesla coil; FFGL has no audio out, so the bangs
-  are what you see of the music). Audio Drive raises the supply voltage with
-  the level.
+  bang or a spark (a singing Tesla coil, minus the singing: FFGL has no audio
+  out, so the bangs are what you see of the music). Audio Drive raises the
+  supply voltage with the level.
 - **Light:** Efficiency, Glow, Gas (Air, Neon, Argon, Neon-Xenon), Shutter
   (angle), Persistence (the camera's afterimage, not the air's), Show
   Apparatus (the rods, coil, spheres or globe, lit by the discharge) and
@@ -163,11 +151,11 @@ sheets) rather than filmed off a screen.*
 
 The shared controls (Voltage, Impedance, Branching, Detail, Memory, Reach,
 Efficiency, Scale) are relative to each machine's nominal, so switching Machine
-alone keeps each one's geometry, branching and memory looking like itself.
-Supply and Gas are not: switching Machine leaves them where they are set (the
-globe's preset uses the Flyback supply and Neon-Xenon, the Lichtenberg's ZVS,
-the rest NST and air), so for a machine's usual supply and gas pick its preset. The host panel shows the
-physical value: kV, MΩ, η, ms, BPS, µA.
+on its own keeps each one's geometry, branching and memory looking like itself.
+Supply and Gas aren't: switching Machine leaves them wherever they're set (the
+globe's preset uses the Flyback supply and Neon-Xenon, the Lichtenberg's uses
+ZVS, and the rest NST and air), so if you want a machine's usual supply and gas,
+pick its preset. The host panel shows the physical value: kV, MΩ, η, ms, BPS, µA.
 
 | | | |
 | --- | --- | --- |
@@ -180,30 +168,31 @@ coil, and the coil over a test clip through `SW Flyback Over`.</sub>
 
 ## Status
 
-**v0.1.0, 2026-09-24, and honestly early.**
+**v0.1.0, 2026-09-24, and still early days.**
 
-It has **never been loaded into Resolume on macOS**. `oxbow probe` reads both
+It's **never been loaded into Resolume on macOS**. `oxbow probe` reads both
 bundles the way a host does and finds `SW Flyback` / `HV01` / source and
-`SW Flyback Over` / `HV02` / effect. `oxbow selftest` instantiates each through
-the host's own path and renders.
+`SW Flyback Over` / `HV02` / effect, and `oxbow selftest` instantiates each one
+through the host's own path and renders.
 
 **Windows, in Resolume Arena 7.27.1** (win-lab, Mesa llvmpipe, no GPU,
 2026-09-24): a CI build of this source loads from Extra Effects, both plugins
 register with the right id and type, all 54 (source) and 55 (effect) host
 controls match what the plugin declares, both render, and Arena's log stays
-clean: 15 of 15 of the fleet gate's checks, with the audio controls skipped
-(win-lab has no sound device). 33 of the source's controls and 43 of the
-effect's measurably moved the picture. Eight of the source's (Belt Current,
-Gap, Sphere Finish, Origin, Rise Speed, Wind, Target X, Target Y) were
-inconclusive: they act through discharges that come and go between the
-gate's single-frame grabs, and the effect shows the same controls live.
-Software rendering says nothing about a GPU or about speed.
+clean. That's 15 of 15 of the fleet gate's checks, with the audio controls
+skipped because win-lab has no sound device. 33 of the source's controls and 43
+of the effect's measurably moved the picture. Eight of the source's (Belt
+Current, Gap, Sphere Finish, Origin, Rise Speed, Wind, Target X, Target Y) were
+inconclusive: they act through discharges that come and go between the gate's
+single-frame grabs, and the effect shows the same controls live. Software
+rendering says nothing about a GPU or about speed.
 
-There is a
-[user guide](docs/USER-GUIDE.md) and a [browser demo](https://flyback-demo.stoatworks-labs.com/); no OpenFX port. It has only been built and measured on
-macOS (Apple Silicon, M4 Max); the Windows build is MSVC's, from CI.
+There's a [user guide](docs/USER-GUIDE.md) and a
+[browser demo](https://flyback-demo.stoatworks-labs.com/), but no OpenFX port.
+I've only built and measured it on macOS (Apple Silicon, M4 Max). The Windows
+build is MSVC's, from CI.
 
-What is measured, on this machine:
+What's measured, on this Mac:
 
 | | |
 | --- | --- |
@@ -235,35 +224,35 @@ per frame, on a machine shared with other work while it ran):
 | Plasma Globe | 0.76 | 1.04 | 2.88 | 5.0 | 11.0 |
 | Lichtenberg | 0.73 | 1.25 | 3.09 | 1.3 | 2.5 |
 
-These come from a run with the load average near 8, and **predate the worker
-thread** (64c21d2): "engine" was then time on the render thread. `--bench` now
-runs the worker paced at 60 fps and reports the render thread's time and the
-worker's time per step separately; the table has not been re-measured since. The same bench inside
-`tools/verify.sh`, with more running beside it, measured GPU 1.6–2.4 ms at
-720p, 2.1–2.8 at 1080p and 5.1–5.8 at 4K, and a worst engine frame of 12.3 ms
-(the globe). Treat the table as a floor and those as a ceiling. Either way a
-frame costs well under the 16.7 ms of 60 fps at 1080p. At 4K the worst sum,
-engine plus GPU, is about 18 ms under load.
+These come from a run with the load average near 8, and they **predate the
+worker thread** (64c21d2), so "engine" there means time on the render thread.
+`--bench` now runs the worker paced at 60 fps and reports the render thread's
+time and the worker's time per step separately, and I haven't re-measured the
+table since. The same bench inside `tools/verify.sh`, with more running beside
+it, measured GPU 1.6–2.4 ms at 720p, 2.1–2.8 at 1080p and 5.1–5.8 at 4K, and a
+worst engine frame of 12.3 ms (the globe). Treat the table as a floor and those
+as a ceiling. Either way a frame costs well under the 16.7 ms of 60 fps at
+1080p. At 4K the worst sum, engine plus GPU, is about 18 ms under load.
 
-What is **not** verified, and is the honest limit of this release:
+What **isn't** verified yet:
 
-- **Never in a host on macOS.** How 53 parameters in thirteen groups present, whether
-  Resolume's clock arrives in seconds or milliseconds (it is voted on), and
-  what its FFT bins really are.
+- **Never in a host on macOS.** I don't know yet how 53 parameters in thirteen
+  groups present, whether Resolume's clock arrives in seconds or milliseconds
+  (the plugin works it out by vote), or what its FFT bins really are.
 - **The engine runs on a worker thread, one frame late.** Each frame draws
   the engine step started the frame before, so the picture is one frame
   behind the clock, and the very first frame shows the apparatus with no
-  discharge light. The render thread waits only for whatever of the engine's
-  step (worst 11–12 ms, the globe) did not overlap the host's own work. It is
-  bit-exact against the synchronous engine one frame earlier
-  (`--determinism`), but has never run inside a host.
+  discharge light. The render thread only waits for whatever part of the
+  engine's step (worst 11–12 ms, the globe) didn't overlap the host's own
+  work. It's bit-exact against the synchronous engine one frame earlier
+  (`--determinism`), but it's never run inside a host.
 - **Some constants are models, not measurements.** The low-current Ayrton
   constants (D = 750 W/m sets the ladder's height), the streamer propagation
   field, the glass's coupling in the globe, a toroid treated as a sphere, and
-  the line weights behind each gas's colour. AGENTS.md lists which were carried
-  from memory.
+  the line weights behind each gas's colour. AGENTS.md lists which ones were
+  carried from memory.
 - **The Lichtenberg figure grows over three seconds and stays lit.** A real one
-  forms in nanoseconds and is a dark fossil afterwards. That is staging.
+  forms in nanoseconds and is a dark fossil afterwards. That bit's showbiz.
 - **No racing sparks down the Tesla coil's secondary.** The Van de Graaff's
   corona is charged against the belt (C dV/dt = I − G(V − V_c)), but G is
   derived to first order in space charge and the rough-sphere factor is
@@ -271,14 +260,14 @@ What is **not** verified, and is the honest limit of this release:
 
 ## Browser demo
 
-**<https://flyback-demo.stoatworks-labs.com/>** — both plugins, all five
-machines, in a browser. It is not the plugin. The light path is the plugin's
-own GLSL, copied unedited (`demo/tools/check_shaders.py`, run by
-`tools/verify.sh`, fails on any drift). The CPU engine — the Laplace solve, the
-breakdown model, the machines' circuits, the controls — is a hand port to
+**<https://flyback-demo.stoatworks-labs.com/>**: both plugins and all five
+machines, in a browser. It isn't the plugin, though. The light path is the
+plugin's own GLSL, copied unedited (`demo/tools/check_shaders.py`, run by
+`tools/verify.sh`, fails on any drift). The CPU engine (the Laplace solve, the
+breakdown model, the machines' circuits and the controls) is a hand port to
 JavaScript in `demo/engine.js` that **nothing checks but a reader**. It runs at
-the plugin's own lattice sizes on the page's main thread, not bit-exact, with
-no audio. The page lists every difference.
+the plugin's own lattice sizes on the page's main thread, isn't bit-exact and
+has no audio. The page lists every difference.
 
 ## Build
 
@@ -329,6 +318,6 @@ This project is built on other people's work — see [ATTRIBUTIONS.md](ATTRIBUTI
 
 MIT.
 
-The physics is from the papers and books ATTRIBUTIONS.md lists: the dielectric
-breakdown model, Ayrton's arc, Kelvin's images, Peek's law and the CIE
-observer. Nothing is copied from anyone's source.
+The physics comes from the papers and books ATTRIBUTIONS.md lists: the
+dielectric breakdown model, Ayrton's arc, Kelvin's images, Peek's law and the
+CIE observer. None of it's copied from anyone's source.
