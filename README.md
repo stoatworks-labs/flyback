@@ -13,6 +13,8 @@ Tesla coil, a Van de Graaff generator, a plasma globe and a Lichtenberg figure. 
 FFGL plugins, a source (`SW Flyback`) and an effect that strikes into your clip
 (`SW Flyback Over`), and nobody has to stand behind the cage.
 
+The [project page](https://stoatworks-labs.com/software/flyback/) has the downloads, the [user guide](https://stoatworks-labs.com/software/flyback/guide/) and the video.
+
 ![A Tesla coil firing: violet streamers branching off the toroid into the air, and one white-hot strike down to the grounded base](docs/hero.png)
 
 <sub>The Tesla coil as it starts up: an NST coil at 120 bangs a second, streamers into the
