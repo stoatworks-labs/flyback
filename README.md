@@ -184,10 +184,10 @@ The law, chosen by running Resolume's eighteen demo WAVs through it
 (`hvtest --demo-music`): a pitched frame sets the note, unpitched sound above
 the **Gate** keeps it going, and anything below the Gate is a rest that
 forgets it. A coil that only fired on pitched frames was dark 81–97% of the
-time on the demo beats, lit in flickers averaging one to four frames. The catch is that
-on a drum loop it holds whatever pitch it last heard right through the loop,
-so for drums raise the Gate (at −30 dBFS five of the six demo beats rest
-between hits).
+time on the demo beats, lit in flickers averaging one to four frames. The
+catch is that on a drum loop it holds whatever pitch it last heard right
+through the loop, so for drums raise the Gate (at −30 dBFS five of the six
+demo beats rest between hits).
 
 A sung bang is the same bang as at that BPS, channel memory and all, so high
 notes throw long streamers and low notes short, fresh ones. A small lamp in
@@ -197,10 +197,10 @@ on.
 
 With Pitch Source **Off**, the default, the plugin is v0.1.0's: it doesn't
 create an audio engine, list devices or make a single CoreAudio call, and its
-output is byte-for-byte origin/main's in every render compared (below). The four controls come after
-About, so a v0.1.0 composition loads as it was saved. On Windows the mode is
-compiled out for now (earshot hasn't been built with MSVC): the controls are
-there but no device opens.
+output is byte-for-byte origin/main's in every render compared (below). The
+four controls come after About, so a v0.1.0 composition loads as it was saved.
+On Windows the mode is compiled out for now (earshot hasn't been built with
+MSVC): the controls are there but no device opens.
 
 ## Status
 
