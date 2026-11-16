@@ -138,9 +138,8 @@ than a screen recording.*
 - **Plasma Globe:** Globe Size, and Finger with Finger X/Y.
 - **Lichtenberg:** Origin (a point or the bottom edge).
 - **Audio:** Audio (Resolume's FFT buffer). Audio Fires turns each onset into a
-  bang or a spark (a singing Tesla coil, minus the singing: FFGL has no audio
-  out, so the bangs are what you see of the music). Audio Drive raises the
-  supply voltage with the level.
+  bang or a spark (a coil that bangs on the beat; for one that sings the note,
+  see Singing). Audio Drive raises the supply voltage with the level.
 - **Light:** Efficiency, Glow, Gas (Air, Neon, Argon, Neon-Xenon), Shutter
   (angle), Persistence (the camera's afterimage, not the air's), Show
   Apparatus (the rods, coil, spheres or globe, lit by the discharge) and
@@ -150,6 +149,9 @@ than a screen recording.*
   are ground, so strikes go into the picture and a globe's filaments gather to
   the brightest thing in frame.
 - **Layout:** Position X/Y, Scale and Rotation.
+- **Singing** (after About, and not in v0.1.0): Pitch Source (Off, System
+  default, then your capture devices), Rescan Inputs, Octave (−4 to +2) and
+  Gate (−100 to −20 dBFS). See [The singing coil](#the-singing-coil).
 
 The shared controls (Voltage, Impedance, Branching, Detail, Memory, Reach,
 Efficiency, Scale) are relative to each machine's nominal, so switching Machine
@@ -167,6 +169,38 @@ pick its preset. The host panel shows the physical value: kV, MΩ, η, ms, BPS, 
 <sub>Each preset, rendered by `hvtest`: the ladder mid-climb, a Van de Graaff
 spark off a polished sphere, a neon-xenon globe, a Lichtenberg figure, the
 coil, and the coil over a test clip through `SW Flyback Over`.</sub>
+
+## The singing coil
+
+A musical Tesla coil's interrupter fires once per period of the note, so the
+crack of every bang *is* the note. Set **Pitch Source** to an input and the
+coil does that: it listens through [earshot](external/earshot/README.md) (its
+own capture device, not Resolume's FFT, which has no pitch in it), and its
+interrupter fires at the detected pitch instead of at BPS, which then reads
+"sung". The rate is the note times 2^Octave, folded by whole octaves into the
+coil's 5–1000 bangs a second, so a high note keeps its pitch class.
+
+The law, chosen by running Resolume's eighteen demo WAVs through it
+(`hvtest --demo-music`): a pitched frame sets the note, unpitched sound above
+the **Gate** keeps it going, and anything below the Gate is a rest that
+forgets it. A coil that only fired on pitched frames was dark 81–97% of the
+time on the demo beats, lit in flickers averaging one to four frames. The catch is that
+on a drum loop it holds whatever pitch it last heard right through the loop,
+so for drums raise the Gate (at −30 dBFS five of the six demo beats rest
+between hits).
+
+A sung bang is the same bang as at that BPS, channel memory and all, so high
+notes throw long streamers and low notes short, fresh ones. A small lamp in
+the top-left corner says how the input is doing (green running, red silent,
+blinking red missing, blinking amber opening), and only while Pitch Source is
+on.
+
+With Pitch Source **Off**, the default, the plugin is v0.1.0's: it doesn't
+create an audio engine, list devices or make a single CoreAudio call, and its
+output is byte-for-byte origin/main's in every render compared (below). The four controls come after
+About, so a v0.1.0 composition loads as it was saved. On Windows the mode is
+compiled out for now (earshot hasn't been built with MSVC): the controls are
+there but no device opens.
 
 ## Status
 
@@ -211,9 +245,11 @@ What's measured, on this Mac:
 | audio | the first hit after a fresh instance, and after the clock jumps back, fires |
 | GL state | viewport, vertex array, program, units, framebuffer, blend, scissor, clear colour and buffers, as the host left them |
 | 320×180 | every pixel check (light, exposure, determinism, Over, onset, GL state) and its negative controls pass again at CI's raster |
-| negative controls | **14** wrong models, **all 14** detected, at the development rasters and at 320×180 |
-| mutation | **9** one-character mutants of the engine and the GLSL (2 in the GLSL, caught by `--light`), **all 9** caught |
-| dead controls | **48** parameters, all live where they apply |
+| singing coil | bangs counted against the integral of the detected pitch's rate, **within one** at 55 Hz to 1318.51 Hz and octaves −4 to +2 (e.g. 1290 bangs where 440 Hz integrates to 1290.667). Pitch within **0.022 cents** on tones. A 200→400 Hz glide: every interval between bangs is one cycle to 7.7e-14. Exact counts at 24, 30, 60 and 144 fps and at irregular steps, and bang times to 4.4e-11 s at a clock of 499,000 s. Sung streamers equal the BPS coil's at the same rate. In the picture, every frame holds a whole number of bangs' light, within `--light`'s bound |
+| singing off | `--off`: the engine's frame bit-identical with every new control moved, and no audio engine, listing, select, feed or update. Against origin/main's harness, **36 of 36** renders byte-identical (every machine and preset, beat-driven, a cue sheet switching machines, the effect). **0** CoreAudio calls in 13 mode-off processes under an interposing trap, which does catch a call when one is made |
+| negative controls | **31** wrong models, **all 31** detected, at the development rasters and at 320×180 |
+| mutation | **18** one-character mutants of the engine, the pitch input and the GLSL (3 in the GLSL), **all 18** caught |
+| dead controls | **51** parameters, all live where they apply |
 
 Render cost (`hvtest --bench`; GPU time by `GL_TIME_ELAPSED`, engine CPU time
 per frame, on a machine shared with other work while it ran):
@@ -238,7 +274,7 @@ as a ceiling. Either way a frame costs well under the 16.7 ms of 60 fps at
 
 What **isn't** verified yet:
 
-- **Never in a host on macOS.** I don't know yet how 53 parameters in thirteen
+- **Never in a host on macOS.** I don't know yet how 57 parameters in fourteen
   groups present, whether Resolume's clock arrives in seconds or milliseconds
   (the plugin works it out by vote), or what its FFT bins really are.
 - **The engine runs on a worker thread, one frame late.** Each frame draws
@@ -255,6 +291,12 @@ What **isn't** verified yet:
   carried from memory.
 - **The Lichtenberg figure grows over three seconds and stays lit.** A real one
   forms in nanoseconds and is a dark fossil afterwards. That bit's showbiz.
+- **The singing coil has never heard a real input in a check.** The harness
+  feeds earshot scripted devices and synthetic tones; it's never been in
+  Resolume, never asked for microphone permission, and how Resolume shows its
+  16-entry device menu (with spare "(none)" rows until the mode is first on) is
+  unknown. One voice only: a chord sings as whichever pitch is found. Every bang
+  carries the same energy, so there's no velocity.
 - **No racing sparks down the Tesla coil's secondary.** The Van de Graaff's
   corona is charged against the belt (C dV/dt = I − G(V − V_c)), but G is
   derived to first order in space charge and the rough-sphere factor is
@@ -298,6 +340,9 @@ The offline harness renders the real plugin class headlessly:
     ./build/hvtest --determinism    same seed, same frames
     ./build/hvtest --over           strikes go into the picture
     ./build/hvtest --onset          the first hit fires
+    ./build/hvtest --sing           the singing coil: bangs at the note, the fold, the Gate, rests
+    ./build/hvtest --off            Pitch Source Off changes nothing and reaches no audio API
+    ./build/hvtest --out /tmp/s.png --tone 220 --set "Pitch Source=System default" --frames 120
     ./build/hvtest --negative       every check against a wrong model
     ./build/hvtest --offline        the checks that need no GL context (what CI runs)
     ./build/hvtest --light --size 320x180   any pixel check at another raster

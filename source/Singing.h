@@ -33,9 +33,9 @@ class CaptureBackend;
       40..2000 Hz) sets the note.
     - The coil sounds while it holds a note and the window level is at or
       above the Gate. Unvoiced frames above the Gate SUSTAIN the last note:
-      the demo beats are voiced on 14 to 88 frames of 450 and a "voiced
-      frames only" coil was dark for 80 to 97% of them, in flickers 1 to 3
-      frames long.
+      the six demo beats are voiced on 2.9 to 19.1% of their frames, so a
+      "voiced frames only" coil was dark for 81 to 97% of each, lit in mean
+      runs of 1.2 to 3.7 frames (`hvtest --demo-music`).
     - Below the Gate is a rest: the coil is silent and FORGETS the note, so the
       next one waits for its own pitch instead of starting on the old one.
       A new stream (another device, a restart) forgets it too.

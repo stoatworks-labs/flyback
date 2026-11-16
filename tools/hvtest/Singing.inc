@@ -1190,6 +1190,44 @@ int runDemoMusic( const std::string& dir )
 	std::printf( "\n  60 fps, Gate -60 dBFS, Octave 0. voiced: earshot's clarity >= 0.80 and level >= the gate. below gate: frames whose\n"
 	             "  window is under -60 dBFS (a frame with no analysis counts as below). sounds: frames the coil fires, under the law\n"
 	             "  (voiced sets, above-gate sustains, a rest forgets) and with voiced frames only. run: the mean sounding run, frames.\n" );
+
+	// The law with the Gate raised: the user's lever for unpitched material,
+	// where a held note would otherwise ride a loop's tail from hit to hit.
+	const double gates[] = { -40.0, -30.0, -20.0 };
+	std::printf( "\n  the law with the Gate raised: sounds %% / mean run (frames)\n" );
+	std::printf( "  %-14s", "clip" );
+	for( double g : gates )
+		std::printf( " %16s", fmt( "Gate %.0f dBFS", g ).c_str() );
+	std::printf( "\n" );
+	for( const std::string& name : files )
+	{
+		Signal s;
+		std::string error;
+		if( !ReadWav( dir + "/" + name, s, error ) )
+			return 1;
+		std::printf( "  %-14s", name.substr( 0, 14 ).c_str() );
+		for( double g : gates )
+		{
+			const SungRun run = SingEngine( s, base, 0, g, 60.0, 0.0, Perturb() );
+			int sounding = 0, runs = 0, length = 0;
+			for( const SungFrame& f : run.frames )
+				if( f.note.rate > 0.0 )
+				{
+					++sounding;
+					++length;
+				}
+				else if( length > 0 )
+				{
+					++runs;
+					length = 0;
+				}
+			if( length > 0 )
+				++runs;
+			const double n = static_cast< double >( run.frames.size() );
+			std::printf( " %8.1f / %5.1f", 100.0 * sounding / n, runs ? static_cast< double >( sounding ) / runs : 0.0 );
+		}
+		std::printf( "\n" );
+	}
 	return 0;
 }
 

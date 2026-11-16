@@ -25,9 +25,9 @@ from Resolume.*
 > The Tesla coil fires 7200 bangs in a minute at 120 BPS. Every Van de Graaff spark comes
 > C·V_b/I = 0.3519 s after the last, to 1.3e-11 s. Each frame's light equals the event's energy
 > times the efficiency to 1.9e-5, inside a derived bound of 4.1e-5. Over a clip of a bright disc
-> on black, 600 of 600 strikes go into the disc. Fourteen models that are wrong on purpose are all
-> detected, nine one-character mutants of the shipped code are all caught, and all 48 parameters
-> swept are live where they apply. It's **never been loaded into Resolume on macOS**. Apart from
+> on black, 600 of 600 strikes go into the disc. Thirty-one models that are wrong on purpose are
+> all detected, eighteen one-character mutants of the shipped code are all caught, and all 51
+> parameters swept are live where they apply. It's **never been loaded into Resolume on macOS**. Apart from
 > the Windows run below, the one host it's run in is the fleet's own test host, `oxbow`, which
 > reads both plugins and renders through each.
 > On Windows, a build of v0.1.0 loads, registers and renders in Resolume Arena 7.27.1, with every
@@ -343,6 +343,75 @@ other plugins was written against. **No audio has reached Flyback in a host.** T
 synthetic beats, and checks that the first hit after a fresh instance, and after the clock jumps
 back, still fires.
 
+For a coil that plays the *note* rather than the beat, see the Singing group.
+
+---
+
+## The Singing group
+
+*Added after v0.1.0.* A musical Tesla coil's interrupter fires once per period of the note it's
+playing, so the crack of every bang *is* the note: 220 bangs a second sounds an A. The Singing
+group makes Flyback's coil do that. It listens to an audio input of its own, works out the pitch,
+and fires the interrupter at it instead of at **BPS**, which then reads **sung**. It only changes
+the Tesla coil; the other machines carry on as before (the status lamp below shows whichever
+machine is up).
+
+The group sits at the very bottom of the panel, after About, so compositions saved with v0.1.0
+load exactly as they were.
+
+**Pitch Source:** where the coil listens. **Off (BPS)**, the default, is the coil as it always
+was. **System default** is your Mac's default input; below it are your capture devices, by name.
+The list is filled the first time you switch Pitch Source on: until then it shows only Off,
+System default and spare **(none)** rows, because Flyback doesn't ask macOS about audio devices at
+all while the mode is off. It listens through its own capture, not Resolume's Audio picker: the
+spectrum Resolume hands a plugin has no pitch in it.
+
+**Rescan Inputs:** lists the devices again, for one you've plugged in since. It only acts while
+Pitch Source is on.
+
+**Octave:** −4 to +2, default 0. The coil fires at the note times two to this power. Whatever
+you set, the rate is then folded by whole octaves into the coil's own 5 to 1000 bangs a second,
+so a high note keeps its pitch class rather than running away: a top E at 1318.5 Hz fires at
+659.3.
+
+**Gate:** −100 to −20 dBFS, default −60 in the middle. Sound below the Gate is a rest.
+
+**How it decides.** A pitched moment sets the note. Unpitched sound above the Gate keeps the last
+note going, so a sung line doesn't stutter between its consonants. Anything below the Gate is a
+rest: the coil goes quiet and forgets the note, and the next sound waits for its own pitch. This
+was chosen by running Resolume's eighteen demo clips through it. A coil that fired only on the
+pitched moments was dark most of the time on the drum loops, lit in bursts averaging one to four
+frames.
+
+**Drums.** The flip side is that on a drum loop the coil holds whatever pitch it last heard
+right through the loop, because a loop's tail rarely drops below −60 dBFS between hits. **Raise
+the Gate** until it rests between hits: around −30 dBFS, five of the six demo beats did.
+
+**What it looks like.** A sung bang is exactly the bang the coil makes at that BPS, so the
+streamers follow the note: a low note gives short, fresh sparks, a high one long streamers that
+re-use the last bang's hot channel (see **BPS** and **Channel Memory**).
+
+**The lamp.** While Pitch Source is on, a small lamp in the top-left corner of the picture says
+how the input is doing:
+
+- **green:** sound is arriving.
+- **red:** the input is open but delivering pure silence. Usually that's macOS microphone
+  permission for Resolume, or an input with nothing patched to it.
+- **blinking red:** the device isn't connected. Flyback keeps trying, and never swaps in another.
+- **blinking amber:** the input is still opening.
+
+With Pitch Source off there's no lamp.
+
+**In MIDI terms.** A note-on is the first pitched moment after a rest, a change of pitch while
+the coil is sounding is a legato change of note (the interrupter carries straight on), and a
+note-off is the level dropping below the Gate. Flyback doesn't take MIDI itself.
+
+**What's known and what's assumed.** One voice only: a chord sounds as whichever pitch is found.
+Every bang carries the same energy, so loud and soft notes look the same. The pitch tracking,
+the fold, the Gate and the bang timing are all measured by the harness on synthetic tones and on
+Resolume's demo clips, but **no real input has reached it in a host**, and on **Windows** the
+mode isn't built yet: the controls are there, but no device opens and the lamp stays blinking red.
+
 ---
 
 ## The Light group
@@ -498,6 +567,13 @@ current Detect On. Lower the threshold, or try Edges.
 **Audio does nothing.** Audio Fires and Audio Drive both start at 0. Raise them, and check the Audio
 picker is set to a source.
 
+**The coil ignores BPS, and BPS reads "sung".** Pitch Source is on. Set it to Off (BPS).
+
+**The singing coil holds one note through a drum loop.** That's the sustain. Raise the Gate.
+
+**The lamp is red.** The input is delivering pure silence: check macOS has given Resolume the
+microphone, and that the input has something patched to it.
+
 **The effect does nothing at all.** A shader that won't compile looks just like that. The actual
 error is in the log:
 
@@ -525,7 +601,7 @@ a sweep fails if any control does nothing.
 
 **Assumed, or not verified:**
 
-- **Never loaded into Resolume on macOS.** How 53 parameters in thirteen groups present, whether
+- **Never loaded into Resolume on macOS.** How 57 parameters in fourteen groups present, whether
   the X/Y pairs show as position pads, whether Resolume's clock arrives in seconds or milliseconds,
   and what its FFT bins really are, are all untested in a host.
 - **Some constants are models, not measurements**: the low-current arc constants that set the
@@ -534,14 +610,17 @@ a sweep fails if any control does nothing.
 - **The Lichtenberg figure grows over three seconds and stays lit.** That's for show.
 - **No racing sparks down the Tesla coil's secondary**, and no corona on the coil.
 - **Presets override**, so while one is selected most sliders are inert (see Presets).
+- **The singing coil has only heard synthetic tones and Resolume's demo clips**, fed to it by the
+  harness, never a real input in a host. It isn't built on Windows yet.
 - **Not timed in a host, or on Windows.** No OpenFX version. There's a [browser demo](https://flyback-demo.stoatworks-labs.com), but it runs a JavaScript port of the engine that only a reader checks, so treat it as a preview rather than the plugin.
 
 ---
 
 ## About
 
-The last group, **About**, has the plugin's name, version, licence and maker, and buttons that
-open the project page, the source on GitHub and the support page in your browser.
+The **About** group has the plugin's name, version, licence and maker, and buttons that open the
+project page, the source on GitHub and the support page in your browser. It's the last group but
+one: Singing comes after it.
 
 ## Links
 
