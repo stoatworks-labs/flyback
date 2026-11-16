@@ -119,8 +119,19 @@ enum ParamId : unsigned int
 	PT_ABOUT_BUTTON_2,
 	PT_ABOUT_BUTTON_3,
 	PT_ABOUT_BUTTON_4,
+
+	// Singing (the Tesla coil's interrupter at the detected pitch: Singing.h).
+	// Appended AFTER the About block: a v0.1.0 composition stores parameters
+	// by index, so every id above keeps its number and its meaning.
+	PT_PITCH_SOURCE,
+	PT_RESCAN,
+	PT_OCTAVE,
+	PT_GATE,
 	PT_COUNT
 };
+
+/// One past the About block's last id.
+constexpr unsigned int PT_ABOUT_END = PT_PITCH_SOURCE;
 
 /// Bins in the host's FFT buffer.
 constexpr int kAudioBins = 64;
@@ -147,6 +158,9 @@ struct Resolved
 	int detect               = 0;
 	float threshold          = 0.5f;
 	float audioFires         = 0.0f;
+	bool singing             = false;///< Pitch Source is on (the interrupter follows the pitch)
+	int octaves              = 0;
+	double gateDb            = -60.0;
 };
 Resolved Resolve( const float* params, double level, double aspect );
 

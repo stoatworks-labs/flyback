@@ -1,0 +1,15 @@
+# Build output
+/build/
+/build-*/
+/cmake-build-*/
+
+# macOS
+.DS_Store
+
+# IDE
+/.vs/
+/.idea/
+/.vscode/
+
+# Local tooling
+/.claude/

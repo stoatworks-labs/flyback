@@ -1,5 +1,7 @@
 #include "Controls.h"
 
+#include "Singing.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -227,6 +229,9 @@ Resolved Resolve( const float* p, double level, double aspect )
 	out.detect             = Option( p[ PT_DETECT ], 3 );
 	out.threshold          = std::clamp( p[ PT_THRESHOLD ], 0.0f, 1.0f );
 	out.audioFires         = std::clamp( p[ PT_AUDIO_FIRES ], 0.0f, 1.0f );
+	out.singing            = p[ PT_PITCH_SOURCE ] > 0.0f;
+	out.octaves            = sing::OctaveFromParam( p[ PT_OCTAVE ] );
+	out.gateDb             = sing::GateFromParam( p[ PT_GATE ] );
 	return out;
 }
 
@@ -250,7 +255,9 @@ std::string Display( unsigned int index, const float* p )
 	case PT_RISE: std::snprintf( buffer, sizeof( buffer ), "%.2f m/s", s.rise ); break;
 	case PT_WIND: std::snprintf( buffer, sizeof( buffer ), "%+.2f m/s", s.wind ); break;
 	case PT_BPS:
-		if( s.bps <= 0.0 )
+		if( r.singing && s.machine == Machine::Tesla )
+			std::snprintf( buffer, sizeof( buffer ), "sung" );
+		else if( s.bps <= 0.0 )
 			std::snprintf( buffer, sizeof( buffer ), "off" );
 		else
 			std::snprintf( buffer, sizeof( buffer ), "%.0f BPS", s.bps );
@@ -278,6 +285,7 @@ std::string Display( unsigned int index, const float* p )
 	case PT_ILLUMINATION: std::snprintf( buffer, sizeof( buffer ), "x%.1f", r.look.illumination ); break;
 	case PT_SCALE: std::snprintf( buffer, sizeof( buffer ), "x%.2f", s.scale ); break;
 	case PT_ROTATION: std::snprintf( buffer, sizeof( buffer ), "%.0f deg", s.rotation * 180.0 / kPi ); break;
+	case PT_GATE: std::snprintf( buffer, sizeof( buffer ), "%.0f dBFS", r.gateDb ); break;
 	default: return std::string();
 	}
 	return buffer;

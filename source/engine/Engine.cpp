@@ -498,6 +498,8 @@ public:
 		bangIndex = 0;
 		lastBang  = -kHuge;
 		pending.clear();
+		singing   = false;
+		phase     = 0.0;
 	}
 
 	void Fire( double t ) override
@@ -514,6 +516,12 @@ public:
 
 	void Step( double t0, double t1, double exposeFrom, int frame, Frame& out, std::vector< Event >& log ) override
 	{
+		if( s.sing )
+		{
+			StepSung( t0, t1, exposeFrom, frame, out, log );
+			return;
+		}
+		singing = false;
 		// Never replay a gap: a clock bang due before this frame began is one
 		// that a jump skipped.
 		if( bangPeriod > 0.0 && anchor + static_cast< double >( bangIndex + 1 ) / s.bps < t0 - 1e-9 )
@@ -544,6 +552,65 @@ public:
 				++bangIndex;
 			Bang( t, t > exposeFrom, frame, out, log );
 		}
+	}
+
+	/// The singing interrupter: a phase accumulator in double, in cycles.
+	///
+	/// The rate is held for the step ( t0, t1 ]. The phase at t1 is
+	/// phase + r ( t1 - t0 ); every whole cycle it crosses is a bang, at
+	/// t0 + ( k - phase ) / r. Only the step's length enters, never the clock's
+	/// value: t1 - t0 is exact (Sterbenz: t1 / 2 <= t0 <= t1 for any clock past
+	/// its first step), so at Resolume's half a million seconds the phase
+	/// resolves what it does at zero, and splitting a constant rate's time into
+	/// other frames moves no bang by more than a few ulps (`hvtest --sing`).
+	void StepSung( double t0, double t1, double exposeFrom, int frame, Frame& out, std::vector< Event >& log )
+	{
+		if( !singing )
+		{
+			singing = true;// entering the mode: the first cycle starts here
+			phase   = 0.0;
+		}
+		double a = t0, b = t1;
+		if( s.singHooks & kSingHookFloatClock )
+		{
+			a = static_cast< float >( t0 );
+			b = static_cast< float >( t1 );
+		}
+		sung.clear();
+		const double r = s.singRate > 0.0 && std::isfinite( s.singRate ) ? s.singRate : 0.0;
+		if( r > 0.0 && b > a )
+		{
+			const double end = phase + r * ( b - a );
+			const double n   = std::floor( end );
+			for( double k = 1.0; k <= n; k += 1.0 )
+				sung.push_back( std::min( b, a + ( k - phase ) / r ) );
+			phase = end - n;
+		}
+		else if( r <= 0.0 )
+			phase = 0.0;// a rest: the next note's first bang is a whole period after it starts
+		if( s.singHooks & kSingHookPhaseReset )
+			phase = 0.0;
+
+		// The clock's bangs and Fire's, in time order.
+		size_t next = 0;
+		for( ;; )
+		{
+			const double clock = next < sung.size() ? sung[ next ] : kHuge;
+			double fired       = kHuge;
+			if( !pending.empty() )
+				fired = *std::min_element( pending.begin(), pending.end() );
+			const double t = std::min( clock, fired );
+			if( t > t1 )
+				break;
+			if( fired <= clock )
+				pending.erase( std::min_element( pending.begin(), pending.end() ) );
+			else
+				++next;
+			Bang( t, t > exposeFrom, frame, out, log );
+		}
+		// The BPS clock, kept where a switch back to it would start.
+		anchor    = t1;
+		bangIndex = 0;
 	}
 
 	void Bang( double t, bool exposed, int frame, Frame& out, std::vector< Event >& log )
@@ -659,6 +726,9 @@ public:
 	double bangPeriod = -1.0;
 	double lastBang   = -kHuge;
 	std::vector< double > pending;
+	bool singing = false;
+	double phase = 0.0;///< the singing interrupter's, in cycles, 0 <= phase < 1
+	std::vector< double > sung;
 };
 
 //===========================================================================

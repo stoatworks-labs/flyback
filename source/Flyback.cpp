@@ -31,7 +31,7 @@ constexpr unsigned int kPresetColumns[ presets::kParamCount ] = {
 
 // The About block is declared one button per link; the run in the enum and
 // the run the block has must agree. They diverge the day a guide is written.
-static_assert( PT_COUNT - PT_ABOUT_TEXT == stoatworks::about::kParamCount,
+static_assert( PT_ABOUT_END - PT_ABOUT_TEXT == stoatworks::about::kParamCount,
                "the About run no longer matches StoatworksAbout.h -- add or remove a PT_ABOUT_BUTTON_n" );
 
 FlybackPlugin::FlybackPlugin( bool overInput_ ) :
@@ -107,6 +107,12 @@ void FlybackPlugin::Declare()
 	params[ PT_POS_Y ]    = 0.5f;
 	params[ PT_SCALE ]    = 0.5f;
 	params[ PT_ROTATION ] = 0.5f;
+
+	// Singing: off, so a v0.1.0 composition (which stores none of these) loads
+	// as it was saved.
+	params[ PT_PITCH_SOURCE ] = 0.0f;
+	params[ PT_OCTAVE ]       = static_cast< float >( sing::kOctaveDefault );
+	params[ PT_GATE ]         = sing::ParamFromGate( -60.0 );
 
 	//---------------------------------------------------------------------
 	// Declaration, in the order the host shows them. SetParamGroup collapses
@@ -219,7 +225,36 @@ void FlybackPlugin::Declare()
 		for( const auto& b : stoatworks::about::buttons() )
 			SetParamInfo( aboutId++, b.label, FF_TYPE_EVENT, false );
 	}
-	group( PT_ABOUT_TEXT, PT_COUNT - 1, "About" );
+	group( PT_ABOUT_TEXT, PT_ABOUT_END - 1, "About" );
+
+	// The singing coil, after About (Controls.h says why). The Pitch Source
+	// menu's length is fixed here; its elements are refilled when the mode is
+	// first switched on, and by Rescan, never before (Singing.h: CoreAudio).
+	{
+		const std::vector< sing::Slot >& slots = pitch.Slots();
+		SetOptionParamInfo( PT_PITCH_SOURCE, "Pitch Source", static_cast< unsigned int >( sing::kDeviceElements ), 0.0f );
+		for( int i = 0; i < sing::kDeviceElements && i < static_cast< int >( slots.size() ); ++i )
+			SetParamElementInfo( PT_PITCH_SOURCE, static_cast< unsigned int >( i ), slots[ static_cast< size_t >( i ) ].label.c_str(),
+			                     slots[ static_cast< size_t >( i ) ].value );
+	}
+	SetParamInfo( PT_RESCAN, "Rescan Inputs", FF_TYPE_EVENT, false );
+	option( PT_OCTAVE, "Octave", { "-4", "-3", "-2", "-1", "0", "+1", "+2" } );
+	standard( PT_GATE, "Gate" );
+	group( PT_PITCH_SOURCE, PT_GATE, "Singing" );
+}
+
+void FlybackPlugin::RefreshPitchMenu()
+{
+	std::vector< std::string > names;
+	std::vector< float > values;
+	for( const sing::Slot& slot : pitch.Slots() )
+	{
+		names.push_back( slot.label );
+		values.push_back( slot.value );
+	}
+	names.resize( sing::kDeviceElements, "(none)" );
+	values.resize( sing::kDeviceElements, -99.0f );
+	SetParamElements( PT_PITCH_SOURCE, names, values, true );
 }
 
 //---------------------------------------------------------------------------
@@ -229,8 +264,20 @@ FFResult FlybackPlugin::SetFloatParameter( unsigned int index, float value )
 {
 	if( index >= PT_COUNT )
 		return FF_FAIL;
-	if( index >= PT_ABOUT_TEXT )
+	if( index >= PT_ABOUT_TEXT && index < PT_ABOUT_END )
 		return stoatworks::about::handleParam( index - PT_ABOUT_TEXT, value ) ? FF_SUCCESS : FF_FAIL;
+
+	if( index == PT_RESCAN )
+	{
+		// Acted on by the next frame, on the render thread, and only while the
+		// mode is on: with it off nothing may ask the OS for its devices.
+		const bool down = value >= 0.5f;
+		if( down && !rescanHeld )
+			rescanPending = true;
+		rescanHeld          = down;
+		params[ PT_RESCAN ] = down ? 1.0f : 0.0f;
+		return FF_SUCCESS;
+	}
 
 	if( index == PT_FIRE )
 	{
@@ -382,6 +429,7 @@ FFResult FlybackPlugin::DeInitGL()
 	busyResult = false;
 	haveShown  = false;
 	renderer.DeInitGL();
+	lampPainter.DeInitGL();
 	rendererReady = false;
 	return FF_SUCCESS;
 }
@@ -446,6 +494,21 @@ FFResult FlybackPlugin::ProcessOpenGL( ProcessOpenGLStruct* input )
 	Resolved r = Resolve( effective, analyser.Level(), aspect );
 
 	//-----------------------------------------------------------------------
+	// Singing: the pitch input, applied and read on this thread. With Pitch
+	// Source Off (the default) this touches nothing and sets nothing, and the
+	// engine runs on the BPS clock exactly as before.
+	//-----------------------------------------------------------------------
+	if( pitch.Apply( effective[ PT_PITCH_SOURCE ], rescanPending ) )
+		RefreshPitchMenu();
+	rescanPending = false;
+	note          = pitch.Update( now, r.octaves, r.gateDb );
+	if( note.active )
+	{
+		r.engine.sing     = true;
+		r.engine.singRate = note.rate;
+	}
+
+	//-----------------------------------------------------------------------
 	// Over: last frame's ground mask for this frame's lattice.
 	//-----------------------------------------------------------------------
 	if( overInput )
@@ -479,7 +542,9 @@ FFResult FlybackPlugin::ProcessOpenGL( ProcessOpenGLStruct* input )
 	if( synchronous )
 	{
 		RunJob( next );
-		return renderer.Render( frame, next.look, input->HostFBO, viewport, clip, maxU, maxV ) ? FF_SUCCESS : FF_FAIL;
+		if( !renderer.Render( frame, next.look, input->HostFBO, viewport, clip, maxU, maxV ) )
+			return FF_FAIL;
+		return DrawLamp( input->HostFBO, viewport ) ? FF_SUCCESS : FF_FAIL;
 	}
 
 	// Last frame's step is (nearly always) done by now: collect it, start this
@@ -501,11 +566,24 @@ FFResult FlybackPlugin::ProcessOpenGL( ProcessOpenGLStruct* input )
 		// The very first frame: nothing has been computed yet. The apparatus
 		// with no light on it, rather than a black frame.
 		Frame empty;
-		return renderer.Render( empty, r.look, input->HostFBO, viewport, clip, maxU, maxV ) ? FF_SUCCESS : FF_FAIL;
+		if( !renderer.Render( empty, r.look, input->HostFBO, viewport, clip, maxU, maxV ) )
+			return FF_FAIL;
+		return DrawLamp( input->HostFBO, viewport ) ? FF_SUCCESS : FF_FAIL;
 	}
 	// The look travels with its frame, except where it is the clip's: this
 	// frame's clip is what the effect is drawn over.
-	return renderer.Render( shown, shownLook, input->HostFBO, viewport, clip, maxU, maxV ) ? FF_SUCCESS : FF_FAIL;
+	if( !renderer.Render( shown, shownLook, input->HostFBO, viewport, clip, maxU, maxV ) )
+		return FF_FAIL;
+	return DrawLamp( input->HostFBO, viewport ) ? FF_SUCCESS : FF_FAIL;
+}
+
+bool FlybackPlugin::DrawLamp( GLuint hostFBO, const GLint viewport[ 4 ] )
+{
+	// The singing coil's status, drawn last, over everything, and only while
+	// the mode is on: with it off not one more GL call is made.
+	if( !note.active )
+		return true;
+	return lampPainter.Draw( hostFBO, viewport, note.lamp, note.blinkOn );
 }
 
 //---------------------------------------------------------------------------

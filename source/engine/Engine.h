@@ -50,6 +50,13 @@ enum class Machine : int
 };
 const char* MachineName( Machine machine );
 
+/// Negative controls for the singing interrupter (Settings::singHooks).
+enum SingHook : int
+{
+	kSingHookFloatClock = 1 << 0,///< the step's times rounded to float, as a host clock in a float would be
+	kSingHookPhaseReset = 1 << 1 ///< the phase thrown away at every step, so the count depends on the frame rate
+};
+
 /// The machine's own framing: how many metres of scene the frame's height
 /// shows, and the camera's exposure for it (display units per J/m^2 of
 /// light). A photographer sets a different exposure for a 100 W arc and a
@@ -79,6 +86,16 @@ struct Settings
 	double topload  = 0.15; ///< toroid major radius, metres
 	int target      = 1;    ///< 0 none, 1 floor, 2 point
 	double targetX  = 0.78, targetY = 0.22;///< frame coordinates 0..1, y up
+
+	// The singing coil (a Tesla coil only). While `sing` is on the interrupter
+	// is a phase accumulator at `singRate` instead of the BPS clock: bangs
+	// fall where the integral of the rate since the last one reaches 1, so a
+	// rate that changes every frame is followed without a leap, and a rest
+	// (rate 0) is silent. The plugin sets the rate from the detected pitch
+	// (Singing.h); the engine knows nothing about audio.
+	bool sing       = false;
+	double singRate = 0.0;///< bangs per second for this step, 0 a rest
+	int singHooks   = 0;  ///< harness negatives: kSingHook*
 
 	// Van de Graaff
 	double belt   = 10e-6;///< amperes

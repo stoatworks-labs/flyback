@@ -39,6 +39,19 @@ endif()
 
 option(FLYBACK_BUILD_TOOLS "Build the offline render and measurement harness" ON)
 
+# The singing Tesla coil needs live pitch, which is earshot (a snapshot under
+# external/earshot; the commit is in external/earshot/SNAPSHOT). earshot has
+# never been compiled by MSVC (its README says so), so it is ON where it has
+# been built and tested -- macOS -- and OFF elsewhere until a Windows build of
+# it is proven. OFF compiles a stub: the parameters are declared identically,
+# so a composition loads the same, and the lamp says no device can open.
+if(APPLE)
+    set(FLYBACK_SINGING_DEFAULT ON)
+else()
+    set(FLYBACK_SINGING_DEFAULT OFF)
+endif()
+option(FLYBACK_SINGING "Live pitch for the singing Tesla coil (earshot)" ${FLYBACK_SINGING_DEFAULT})
+
 # ---------------------------------------------------------------------------
 # The Resolume FFGL SDK, as a git submodule under external/.
 # ---------------------------------------------------------------------------
@@ -49,6 +62,13 @@ endif()
 
 set(FFGL_BUILD_EXAMPLE_PLUGINS OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/ffgl EXCLUDE_FROM_ALL)
+
+if(FLYBACK_SINGING)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/earshot/CMakeLists.txt")
+        message(FATAL_ERROR "external/earshot is missing (FLYBACK_SINGING is ON)")
+    endif()
+    add_subdirectory(external/earshot EXCLUDE_FROM_ALL)
+endif()
 
 # ---------------------------------------------------------------------------
 # Everything both plugins share, as an OBJECT library.
@@ -80,10 +100,14 @@ add_library(flyback_core OBJECT
     source/render/Shaders.cpp
     source/render/Renderer.h
     source/render/Renderer.cpp
+    source/render/Lamp.h
+    source/render/Lamp.cpp
     source/Diag.h
     source/Diag.cpp
     source/Audio.h
     source/Audio.cpp
+    source/Singing.h
+    source/Singing.cpp
     source/PassBuffer.h
     source/PassBuffer.cpp
     source/GLState.h
@@ -97,6 +121,12 @@ add_library(flyback_core OBJECT
 target_include_directories(flyback_core PUBLIC source)
 target_link_libraries(flyback_core PUBLIC ffgl::sdk)
 target_compile_definitions(flyback_core PUBLIC FLYBACK_VERSION="${PROJECT_VERSION}")
+if(FLYBACK_SINGING)
+    target_link_libraries(flyback_core PUBLIC earshot::earshot)
+    target_compile_definitions(flyback_core PUBLIC FLYBACK_SINGING=1)
+else()
+    target_compile_definitions(flyback_core PUBLIC FLYBACK_SINGING=0)
+endif()
 set_target_properties(flyback_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # On Windows/Linux the SDK headers we include pull in <GL/glew.h>. The SDK links
@@ -147,6 +177,9 @@ flyback_add_plugin(FlybackEffect source/EffectPlugin.cpp
 # core-profile context, and the engine on its own where a check needs no GPU.
 # ---------------------------------------------------------------------------
 if(FLYBACK_BUILD_TOOLS AND APPLE)
+    if(NOT FLYBACK_SINGING)
+        message(FATAL_ERROR "hvtest measures the singing coil too: it needs FLYBACK_SINGING=ON")
+    endif()
     add_executable(hvtest tools/hvtest/main.cpp)
     # zlib ships with the OS, which is why the PNG writer is fifty lines here
     # rather than a vendored dependency.

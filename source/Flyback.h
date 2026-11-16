@@ -3,7 +3,9 @@
 #include "Audio.h"
 #include "Controls.h"
 #include "Presets.h"
+#include "Singing.h"
 #include "engine/Engine.h"
+#include "render/Lamp.h"
 #include "render/Renderer.h"
 
 #include <FFGLSDK.h>
@@ -116,10 +118,29 @@ public:
 	{
 		return analyser;
 	}
+	/// The singing coil's pitch input (earshot, once the mode is first on).
+	sing::PitchInput& PitchForTest()
+	{
+		return pitch;
+	}
+	/// What the pitch input said on the last frame.
+	const sing::Note& NoteForTest() const
+	{
+		return note;
+	}
+	/// Where the lamp was drawn last frame, in the host's pixels (x, y, radius).
+	const LampPainter::Placement& LampForTest() const
+	{
+		return lampPainter.Last();
+	}
 
 private:
 	void UpdateClock();
 	void Declare();
+	/// The Pitch Source menu from the pitch input's slots (after it lists).
+	void RefreshPitchMenu();
+	/// The singing coil's lamp, while the mode is on.
+	bool DrawLamp( GLuint hostFBO, const GLint viewport[ 4 ] );
 
 	//-------------------------------------------------------------------
 	// The engine's worker thread.
@@ -170,6 +191,14 @@ private:
 	Frame frame;
 	audio::Analyser analyser;
 	bool rendererReady = false;
+
+	// The singing coil. Nothing here touches CoreAudio until Pitch Source is
+	// first set to something other than Off (Singing.h).
+	sing::PitchInput pitch;
+	sing::Note note;
+	LampPainter lampPainter;
+	bool rescanHeld    = false;
+	bool rescanPending = false;
 
 	std::vector< uint8_t > groundMask;
 	uint64_t groundStamp = 0;
