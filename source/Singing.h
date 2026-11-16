@@ -149,7 +149,8 @@ enum Hook : int
 	kHookGateOpen     = 1 << 1,///< the Gate never closes: a rest still sounds
 	kHookMenuByIndex  = 1 << 2,///< devices valued by position in the menu, not by name
 	kHookEagerDevices = 1 << 3,///< list the devices at construction, as eidophone does
-	kHookOctaveOff    = 1 << 4 ///< Octave is read one octave high
+	kHookOctaveOff    = 1 << 4,///< Octave is read one octave high
+	kHookKeepNote     = 1 << 5 ///< a rest keeps the note: the next sound above the Gate resumes it
 };
 
 #if FLYBACK_SINGING
@@ -202,6 +203,10 @@ public:
 	/// the engine does not exist.
 	void Feed( const float* interleaved, int frames, int rate, int channels );
 
+	/// Harness: as if made anew (the engine, the stream and the note gone), so
+	/// a check can show it would see a pitch input rebuilt where it must not be.
+	void ResetForTest();
+
 	/// What the last select asked for ("" = none).
 	const std::string& Requested() const
 	{
@@ -212,7 +217,7 @@ public:
 
 private:
 	void Start();
-	void Refresh();
+	void Refresh( bool reselect );
 	void Select( float value );
 
 	std::vector< Slot > slots;

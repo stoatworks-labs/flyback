@@ -165,18 +165,22 @@ void PitchInput::Start()
 	++g_engines;
 	if( !engine->ok() )
 		diag::error( "earshot could not allocate: the coil will not sing" );
-	Refresh();
+	Refresh( false );// the caller selects: one select, not two
 #endif
 }
 
-void PitchInput::Refresh()
+void PitchInput::Refresh( bool reselect )
 {
 #if FLYBACK_SINGING
 	slots.clear();
 	slots.push_back( { kOffLabel, "", 0.0f } );
 	slots.push_back( { kDefaultLabel, earshot::kDefaultDevice, earshot::deviceKey( earshot::kDefaultDevice ) } );
 	std::vector< earshot::DeviceInfo > devices;
-	if( g_factory != nullptr )
+	if( devicesDisabled() )
+	{
+		// Never listed: not miniaudio's devices, nor a harness backend's.
+	}
+	else if( g_factory != nullptr )
 	{
 		// A throwaway backend of the harness's kind: it lists, it opens nothing.
 		if( auto lister = g_factory() )
@@ -185,7 +189,7 @@ void PitchInput::Refresh()
 			devices = lister->enumerate();
 		}
 	}
-	else if( !devicesDisabled() )
+	else
 	{
 		++g_lists;
 		devices = earshot::listDevices();
@@ -205,8 +209,8 @@ void PitchInput::Refresh()
 		slots.push_back( { kEmptySlot, "", -static_cast< float >( spare ) } );
 	diag::info( "pitch devices: " + std::to_string( listed ) + " listed" );
 
-	// A device remembered by key and now present again: open it by name.
-	if( applied > 0.0f )
+	// Rescan: a device remembered by key and now present again, opened by name.
+	if( reselect && applied > 0.0f )
 	{
 		const auto known = seen.find( applied );
 		if( known != seen.end() && known->second != requested && !devicesDisabled() )
@@ -281,10 +285,24 @@ bool PitchInput::Apply( float value, bool rescan )
 	}
 	if( rescan && Active() && Started() )
 	{
-		Refresh();
+		Refresh( true );
 		menuChanged = true;
 	}
 	return menuChanged;
+}
+
+void PitchInput::ResetForTest()
+{
+#if FLYBACK_SINGING
+	engine.reset();
+#endif
+	applied     = 0.0f;
+	requested.clear();
+	feeding     = false;
+	appliedGate = 1e9;
+	held        = 0.0;
+	generation  = 0;
+	lastState   = -1;
 }
 
 void PitchInput::Feed( const float* interleaved, int frames, int rate, int channels )
@@ -379,7 +397,7 @@ Note PitchInput::Update( double hostSeconds, int octaves, double gateDb )
 	const bool above = ( hooks & kHookGateOpen ) || static_cast< double >( f.pitch.levelDb ) >= gateDb;
 	if( n.voiced )
 		held = f.pitch.hz;
-	else if( !above || ( hooks & kHookVoicedOnly ) )
+	else if( ( !above && !( hooks & kHookKeepNote ) ) || ( hooks & kHookVoicedOnly ) )
 		held = 0.0;// a rest forgets the note (and the negative control forgets it at once)
 	n.hz       = held;
 	n.sounding = held > 0.0 && above;

@@ -45,23 +45,49 @@
         --names        every name fits the host's 16 bytes, and is unique
         --state        the host's GL state comes back as it went in
         --negative     every check above, against a deliberately wrong model
-        --bench        GPU ms/frame at 720p, 1080p and 4K; engine CPU ms/frame
+        --bench        GPU ms/frame at 720p, 1080p and 4K (--sizes 720,1080); engine CPU ms/frame
+
+    The singing coil (Singing.inc; earshot fed sample-accurately, never a
+    real device -- every engine here gets a scripted backend):
+
+        --sing         the coil bangs at the detected pitch, folded by octaves into
+                       5..1000 BPS; one cycle of the rate between bangs; rests,
+                       the Gate, sustain through noise, a rest forgets the note
+        --sing-clock   the same bangs at 24, 30, 60, 144 fps and irregular steps,
+                       and from a clock at 499,000 s
+        --sing-memory  sung streamers are the BPS coil's at the same rate
+        --device       nothing listed or opened until the mode is on; the menu by
+                       device name; Missing, Silent, slow, Rescan; the lamp colours
+        --sing-picture bangs counted out of the pixels match the pitch's integral
+        --off          the mode off: every new control inert, the frame the same,
+                       no earshot engine, listing or select
+        --lamp         the lamp's colour per state, in the pixels; GL state kept
+        --resize-sing  a resize and a lost context keep the input and the phase
+        --demo-music DIR  a report: every .wav through the coil
+        --trap-probe   reach CoreAudio three ways, for tools/catrap's negative
 */
 
 #include "Controls.h"
 #include "Flyback.h"
 #include "Presets.h"
+#include "Singing.h"
 #include "engine/Dbm.h"
 #include "engine/Engine.h"
 #include "engine/Lattice.h"
 #include "engine/Physics.h"
 #include "engine/Rng.h"
 
+#include <earshot/earshot.h>
+#include <earshot/testing.h>
+
+#include <CoreAudio/AudioHardware.h>
 #include <OpenGL/OpenGL.h>
 #include <OpenGL/gl3.h>
+#include <dlfcn.h>
 #include <zlib.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <csignal>
@@ -74,6 +100,7 @@
 #include <initializer_list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -159,6 +186,16 @@ struct Perturb
 	bool sameForOtherSeed = false;///< --determinism expects a different seed to render the same
 	bool swapGround       = false;///< --over expects the strikes to go to the floor despite the disc
 	bool deafOnset        = false;///< --onset runs an analyser that is not primed
+
+	// The singing coil.
+	double singPitchScale    = 1.0; ///< --sing, --sing-picture expect the rate to be the pitch x this
+	double singMemorySeconds = -1.0;///< --sing, --sing-picture run the SUNG coil with this tau (the BPS reference keeps 20 ms)
+	int singHooks            = 0;   ///< --sing: engine negatives (kSingHook*)
+	int pitchHooks           = 0;   ///< --sing, --device, --off: pitch-input negatives (sing::kHook*)
+	bool singOn              = false;///< --off moves Pitch Source too
+	int expectLamp           = -1;  ///< --lamp expects this state's colour where it should see Running's
+	bool recreateOnInit      = false;///< --resize-sing: the pitch input made anew by InitGL
+	bool expectLeak          = false;///< --lamp expects the lamp's blend left behind, not the host's
 };
 
 //---------------------------------------------------------------------------
@@ -237,9 +274,25 @@ CGLContextObj createContext()
 		kCGLPFAAlphaSize, static_cast< CGLPixelFormatAttribute >( 8 ),
 		static_cast< CGLPixelFormatAttribute >( 0 )
 	};
+	// HVTEST_RENDERER=software: Apple's software renderer, never the GPU
+	// (BRIEF-ADDENDUM: every new check also runs on a second rasteriser).
+	const CGLPixelFormatAttribute generic[] = {
+		kCGLPFAOpenGLProfile, static_cast< CGLPixelFormatAttribute >( kCGLOGLPVersion_GL4_Core ),
+		kCGLPFARendererID, static_cast< CGLPixelFormatAttribute >( kCGLRendererGenericFloatID ),
+		kCGLPFAColorSize, static_cast< CGLPixelFormatAttribute >( 24 ),
+		kCGLPFAAlphaSize, static_cast< CGLPixelFormatAttribute >( 8 ),
+		static_cast< CGLPixelFormatAttribute >( 0 )
+	};
+	const char* want         = std::getenv( "HVTEST_RENDERER" );
+	const bool forceSoftware = want != nullptr && std::string( want ) == "software";
 	CGLPixelFormatObj format = nullptr;
 	GLint count              = 0;
-	if( CGLChoosePixelFormat( accelerated, &format, &count ) != kCGLNoError || format == nullptr )
+	if( forceSoftware )
+	{
+		if( CGLChoosePixelFormat( generic, &format, &count ) != kCGLNoError || format == nullptr )
+			return nullptr;
+	}
+	else if( CGLChoosePixelFormat( accelerated, &format, &count ) != kCGLNoError || format == nullptr )
 		if( CGLChoosePixelFormat( software, &format, &count ) != kCGLNoError || format == nullptr )
 			return nullptr;
 	CGLContextObj context = nullptr;
@@ -248,6 +301,11 @@ CGLContextObj createContext()
 	if( error != kCGLNoError )
 		return nullptr;
 	CGLSetCurrentContext( context );
+	if( forceSoftware )
+	{
+		const GLubyte* name = glGetString( GL_RENDERER );
+		std::fprintf( stderr, "hvtest: HVTEST_RENDERER=software -- GL_RENDERER is %s\n", name ? reinterpret_cast< const char* >( name ) : "?" );
+	}
 	return context;
 }
 
@@ -327,6 +385,303 @@ enum class AudioFeed
 };
 
 //---------------------------------------------------------------------------
+// The singing coil's audio: what earshot is fed, sample-accurately in step
+// with the frames, through the pitch input's feed() (earshot's "as if a
+// device opened"). Never a real device: main() installs the scripted backend
+// below for every engine the harness makes.
+//---------------------------------------------------------------------------
+struct Signal
+{
+	int rate     = 48000;
+	int channels = 2;
+	std::vector< float > samples;///< interleaved
+	size_t Frames() const
+	{
+		return channels > 0 ? samples.size() / static_cast< size_t >( channels ) : 0;
+	}
+	double Seconds() const
+	{
+		return static_cast< double >( Frames() ) / rate;
+	}
+	Signal& Then( const Signal& next )
+	{
+		samples.insert( samples.end(), next.samples.begin(), next.samples.end() );
+		return *this;
+	}
+};
+
+/// A sine at `hz`, `db` re full scale (a sine's peak), `seconds` long, stereo.
+/// Each sample from its own index, so nothing drifts.
+Signal Tone( double hz, double db, double seconds, int rate = 48000 )
+{
+	Signal s;
+	s.rate         = rate;
+	const size_t n = static_cast< size_t >( std::llround( seconds * rate ) );
+	s.samples.resize( 2 * n );
+	const double amp = std::pow( 10.0, db / 20.0 );
+	for( size_t i = 0; i < n; ++i )
+		s.samples[ 2 * i ] = s.samples[ 2 * i + 1 ] = static_cast< float >( amp * std::sin( 2.0 * kPi * hz * static_cast< double >( i ) / rate ) );
+	return s;
+}
+
+Signal Quiet( double seconds, int rate = 48000 )
+{
+	return Tone( 0.0, -400.0, seconds, rate );
+}
+
+/// White noise, uniform, `db` re a full-scale sine's RMS (so a noise at -20
+/// and a tone at -20 have the same window level), deterministic.
+Signal Noise( double db, double seconds, uint32_t seed, int rate = 48000 )
+{
+	Signal s;
+	s.rate         = rate;
+	const size_t n = static_cast< size_t >( std::llround( seconds * rate ) );
+	s.samples.resize( 2 * n );
+	// Uniform on [-a, a] has RMS a / sqrt 3; a sine of peak A has RMS A / sqrt 2.
+	const double a = std::pow( 10.0, db / 20.0 ) * std::sqrt( 3.0 / 2.0 );
+	uint32_t x     = seed ? seed : 1u;
+	for( size_t i = 0; i < n; ++i )
+	{
+		x ^= x << 13;
+		x ^= x >> 17;
+		x ^= x << 5;
+		const double u = static_cast< double >( x ) / 4294967296.0 * 2.0 - 1.0;
+		s.samples[ 2 * i ] = s.samples[ 2 * i + 1 ] = static_cast< float >( a * u );
+	}
+	return s;
+}
+
+/// A WAV (PCM 16/24/32 or float 32), eidophone's reader.
+bool ReadWav( const std::string& path, Signal& out, std::string& error )
+{
+	std::ifstream file( path, std::ios::binary );
+	if( !file )
+	{
+		error = "cannot open " + path;
+		return false;
+	}
+	std::vector< unsigned char > data( ( std::istreambuf_iterator< char >( file ) ), std::istreambuf_iterator< char >() );
+	auto u32 = [ & ]( size_t at ) { return static_cast< uint32_t >( data[ at ] | data[ at + 1 ] << 8 | data[ at + 2 ] << 16 | static_cast< uint32_t >( data[ at + 3 ] ) << 24 ); };
+	auto u16 = [ & ]( size_t at ) { return static_cast< uint16_t >( data[ at ] | data[ at + 1 ] << 8 ); };
+	if( data.size() < 12 || std::memcmp( data.data(), "RIFF", 4 ) != 0 || std::memcmp( data.data() + 8, "WAVE", 4 ) != 0 )
+	{
+		error = path + ": not a RIFF/WAVE file";
+		return false;
+	}
+	int format = 0, bits = 0;
+	size_t at  = 12;
+	out.samples.clear();
+	while( at + 8 <= data.size() )
+	{
+		const uint32_t size = u32( at + 4 );
+		const size_t body   = at + 8;
+		if( std::memcmp( data.data() + at, "fmt ", 4 ) == 0 && body + 16 <= data.size() )
+		{
+			format       = u16( body );
+			out.channels = u16( body + 2 );
+			out.rate     = static_cast< int >( u32( body + 4 ) );
+			bits         = u16( body + 14 );
+			if( format == 0xFFFE && size >= 26 )
+				format = u16( body + 24 );
+		}
+		else if( std::memcmp( data.data() + at, "data", 4 ) == 0 )
+		{
+			const size_t end = std::min( data.size(), body + size );
+			const int bytes  = bits / 8;
+			if( out.channels <= 0 || bytes <= 0 )
+				break;
+			for( size_t q = body; q + bytes <= end; q += bytes )
+			{
+				float v = 0.0f;
+				if( format == 3 && bits == 32 )
+					std::memcpy( &v, &data[ q ], 4 );
+				else if( format == 1 && bits == 16 )
+					v = static_cast< int16_t >( u16( q ) ) / 32768.0f;
+				else if( format == 1 && bits == 24 )
+					v = static_cast< float >( static_cast< int32_t >( ( data[ q ] << 8 | data[ q + 1 ] << 16 | static_cast< uint32_t >( data[ q + 2 ] ) << 24 ) ) / 2147483648.0 );
+				else if( format == 1 && bits == 32 )
+					v = static_cast< float >( static_cast< int32_t >( u32( q ) ) / 2147483648.0 );
+				else
+				{
+					error = path + ": format " + std::to_string( format ) + " at " + std::to_string( bits ) + " bits is not read here";
+					return false;
+				}
+				out.samples.push_back( v );
+			}
+			break;
+		}
+		at = body + size + ( size & 1 );
+	}
+	if( out.rate <= 0 || out.channels <= 0 || out.samples.empty() )
+	{
+		error = path + ": no audio found";
+		return false;
+	}
+	return true;
+}
+
+/// Feeds a signal through the pitch input in step with the frames: before
+/// frame f (counted from the first frame the input exists), everything up to
+/// the end of that frame's interval. Nothing is fed, and the cursor waits,
+/// while the input has no engine: the audio starts when the coil can hear.
+struct Feeder
+{
+	const Signal* signal = nullptr;
+	bool loop            = false;
+	double fps           = 60.0;
+	size_t cursor        = 0;
+	int fed              = 0;
+
+	void Before( sing::PitchInput& pitch )
+	{
+		if( signal == nullptr || signal->Frames() == 0 || !pitch.Started() )
+			return;
+		const size_t target = static_cast< size_t >( std::llround( ( fed + 1 ) / fps * signal->rate ) );
+		++fed;
+		while( cursor < target )
+		{
+			const size_t at = loop ? cursor % signal->Frames() : cursor;
+			if( at >= signal->Frames() )
+				break;
+			const size_t take = std::min( target - cursor, signal->Frames() - at );
+			pitch.Feed( &signal->samples[ at * static_cast< size_t >( signal->channels ) ], static_cast< int >( take ), signal->rate, signal->channels );
+			cursor += take;
+		}
+	}
+};
+
+//---------------------------------------------------------------------------
+// The scripted capture backend (eidophone's): devices by name, one that is
+// silent, one slow to open. Installed for every earshot engine the harness
+// makes, so no check, render or pipe in hvtest can open a real device.
+//---------------------------------------------------------------------------
+struct Script
+{
+	std::mutex lock;
+	std::vector< std::string > present = { "Bench Mic", "Dante 1-2" };
+	std::string silentName = "Dead Mic";      ///< opens, then delivers only zeros
+	std::string slowName   = "Slow Interface";///< takes openDelay to open
+	double openDelay       = 0.3;
+	std::atomic< int > opens { 0 };
+};
+Script g_script;
+
+class ScriptedBackend : public earshot::testing::CaptureBackend
+{
+public:
+	earshot::testing::OpenResult open( const char* name, earshot::testing::AudioSink& sink, char* openedName, char* error ) noexcept override
+	{
+		++g_script.opens;
+		std::string want = name ? name : "";
+		std::vector< std::string > present;
+		{
+			std::lock_guard< std::mutex > guard( g_script.lock );
+			present = g_script.present;
+		}
+		if( want == earshot::kDefaultDevice )
+			want = present.empty() ? "" : present.front();
+		if( want.empty() || std::find( present.begin(), present.end(), want ) == present.end() )
+		{
+			std::snprintf( error, 128, "scripted: '%s' is not connected", want.c_str() );
+			return earshot::testing::OpenResult::NotConnected;
+		}
+		if( want == g_script.slowName )
+			std::this_thread::sleep_for( std::chrono::milliseconds( static_cast< int >( g_script.openDelay * 1000.0 ) ) );
+		const int rate = 48000;
+		sink.begin( rate, 2 );
+		// Four seconds at once: earshot judges silence on audio time, not wall time.
+		std::vector< float > block( static_cast< size_t >( rate ) * 4 * 2, 0.0f );
+		if( want != g_script.silentName )
+			for( size_t i = 0; i < block.size() / 2; ++i )
+				block[ 2 * i ] = block[ 2 * i + 1 ] = static_cast< float >( 0.25 * std::sin( 2.0 * kPi * 220.0 * static_cast< double >( i ) / rate ) );
+		sink.deliver( block.data(), static_cast< uint32_t >( block.size() / 2 ), 2 );
+		std::snprintf( openedName, 128, "%s", want.c_str() );
+		return earshot::testing::OpenResult::Opened;
+	}
+	void close() noexcept override {}
+	std::vector< earshot::DeviceInfo > enumerate() noexcept override
+	{
+		std::lock_guard< std::mutex > guard( g_script.lock );
+		std::vector< earshot::DeviceInfo > list;
+		for( const std::string& name : g_script.present )
+			list.push_back( { name, 2, list.empty() } );
+		return list;
+	}
+};
+
+std::unique_ptr< earshot::testing::CaptureBackend > makeScripted()
+{
+	return std::make_unique< ScriptedBackend >();
+}
+
+/// FLYBACK_NO_DEVICES=1 for a scope, and back as it was after: the pitch
+/// input then never selects a device, so earshot hears only what is fed.
+struct ScopedNoDevices
+{
+	std::string before;
+	bool had = false;
+	ScopedNoDevices()
+	{
+		if( const char* v = std::getenv( "FLYBACK_NO_DEVICES" ) )
+		{
+			had    = true;
+			before = v;
+		}
+		setenv( "FLYBACK_NO_DEVICES", "1", 1 );
+	}
+	~ScopedNoDevices()
+	{
+		if( had )
+			setenv( "FLYBACK_NO_DEVICES", before.c_str(), 1 );
+		else
+			unsetenv( "FLYBACK_NO_DEVICES" );
+	}
+};
+
+/// "Name=Value" against a plugin: the parameter by name, the value as one of
+/// an option's element names or as a number that is ALL number (strtof("Fixed")
+/// is 0, silently: polyhedral's trap). False, with a message, otherwise.
+bool ParseSetting( FlybackPlugin& plugin, const std::string& setting, unsigned int& id, float& value )
+{
+	const size_t eq = setting.find( '=' );
+	if( eq == std::string::npos )
+	{
+		std::fprintf( stderr, "--set wants Name=Value, got '%s'\n", setting.c_str() );
+		return false;
+	}
+	const std::string name = setting.substr( 0, eq ), text = setting.substr( eq + 1 );
+	for( unsigned int i = 0; i < PT_COUNT; ++i )
+	{
+		const char* n = plugin.GetParamName( i );
+		if( n == nullptr || name != n )
+			continue;
+		id = i;
+		if( plugin.GetParamType( i ) == FF_TYPE_OPTION )
+			for( unsigned int e = 0; e < plugin.GetNumParamElements( i ); ++e )
+			{
+				const char* label = plugin.GetParamElementName( i, e );
+				if( label != nullptr && text == label )
+				{
+					const FFMixed mixed = plugin.GetParamElementDefault( i, e );
+					std::memcpy( &value, &mixed.UIntValue, sizeof( value ) );
+					return true;
+				}
+			}
+		char* end       = nullptr;
+		const double v  = std::strtod( text.c_str(), &end );
+		if( text.empty() || end == nullptr || *end != '\0' || !std::isfinite( v ) )
+		{
+			std::fprintf( stderr, "--set %s: '%s' is neither a number nor one of its options\n", name.c_str(), text.c_str() );
+			return false;
+		}
+		value = static_cast< float >( v );
+		return true;
+	}
+	std::fprintf( stderr, "no parameter called '%s'\n", name.c_str() );
+	return false;
+}
+
+//---------------------------------------------------------------------------
 // A rig: the real plugin, a float input texture, an 8-bit output, on a
 // synthetic 60 fps clock.
 //---------------------------------------------------------------------------
@@ -340,6 +695,7 @@ struct Rig
 	double origin = 0.0;
 	AudioFeed feed = AudioFeed::Silence;
 	std::set< int > hits;
+	Feeder audio;///< the singing coil's: nothing unless a signal is set
 
 	ProcessOpenGLStruct process    = {};
 	FFGLTextureStruct inputStruct  = {};
@@ -402,6 +758,36 @@ struct Rig
 		return true;
 	}
 
+	/// The host's framebuffer reallocated at another size mid-run (a layer
+	/// resized, a composition's resolution changed): a new output, a new clip.
+	bool Resize( int w, int h )
+	{
+		glDeleteFramebuffers( 1, &outputFBO );
+		glDeleteTextures( 1, &outputTexture );
+		width  = w;
+		height = h;
+		glGenTextures( 1, &outputTexture );
+		glBindTexture( GL_TEXTURE_2D, outputTexture );
+		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr );
+		glBindTexture( GL_TEXTURE_2D, 0 );
+		glGenFramebuffers( 1, &outputFBO );
+		glBindFramebuffer( GL_FRAMEBUFFER, outputFBO );
+		glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0 );
+		if( glCheckFramebufferStatus( GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
+			return false;
+		process.HostFBO = outputFBO;
+		if( effect )
+		{
+			glDeleteTextures( 1, &clipTexture );
+			const Floats card = buildCard( w, h );
+			clipTexture       = makeTexture( w, h, card.data() );
+			inputStruct.Width = inputStruct.HardwareWidth = static_cast< FFUInt32 >( w );
+			inputStruct.Height = inputStruct.HardwareHeight = static_cast< FFUInt32 >( h );
+			inputStruct.Handle = clipTexture;
+		}
+		return true;
+	}
+
 	void Upload( const Floats& picture )
 	{
 		glBindTexture( GL_TEXTURE_2D, clipTexture );
@@ -427,6 +813,17 @@ struct Rig
 	void Set( unsigned int id, float value )
 	{
 		plugin->SetFloatParameter( id, value );
+	}
+
+	/// "Name=Value", strictly (ParseSetting).
+	bool Apply( const std::string& setting )
+	{
+		unsigned int id = 0;
+		float value     = 0.0f;
+		if( !ParseSetting( *plugin, setting, id, value ) )
+			return false;
+		plugin->SetFloatParameter( id, value );
+		return true;
 	}
 
 	void Press( unsigned int id )
@@ -460,6 +857,7 @@ struct Rig
 		{
 			plugin->SetTime( origin + frame / kFps );
 			Feed( frame );
+			audio.Before( plugin->PitchForTest() );
 			++frame;
 			glBindFramebuffer( GL_FRAMEBUFFER, outputFBO );
 			glViewport( 0, 0, width, height );
@@ -1822,6 +2220,8 @@ int runState( const Perturb& )
 	return Verdict();
 }
 
+#include "Singing.inc"
+
 //===========================================================================
 // --negative
 //===========================================================================
@@ -1854,6 +2254,24 @@ int runNegative( const std::set< std::string >* only = nullptr )
 	add( "determinism", runDeterminism, []( Perturb& p ) { p.sameForOtherSeed = true; }, "expect another seed to render the same" );
 	add( "over", runOver, []( Perturb& p ) { p.swapGround = true; }, "expect the strikes on the floor despite the disc" );
 	add( "onset", runOnset, []( Perturb& p ) { p.deafOnset = true; }, "an analyser that is not primed" );
+	// The singing coil.
+	add( "sing", runSing, []( Perturb& p ) { p.singPitchScale = 1.01; }, "expect the rate 1% (17 cents) above the detected pitch" );
+	add( "sing", runSing, []( Perturb& p ) { p.singHooks = kSingHookPhaseReset; }, "an interrupter that throws its phase away every frame" );
+	add( "sing", runSing, []( Perturb& p ) { p.singHooks = kSingHookFloatClock; }, "an interrupter on a float clock" );
+	add( "sing", runSing, []( Perturb& p ) { p.pitchHooks = sing::kHookOctaveOff; }, "Octave read one octave high" );
+	add( "sing", runSing, []( Perturb& p ) { p.pitchHooks = sing::kHookGateOpen; }, "a gate that never closes" );
+	add( "sing", runSing, []( Perturb& p ) { p.pitchHooks = sing::kHookKeepNote; }, "a rest that keeps the note" );
+	add( "sing", runSing, []( Perturb& p ) { p.pitchHooks = sing::kHookVoicedOnly; }, "no sustain: voiced frames only" );
+	add( "sing-clock", runSingClock, []( Perturb& p ) { p.singHooks = kSingHookFloatClock; }, "the step's times rounded to float" );
+	add( "sing-clock", runSingClock, []( Perturb& p ) { p.singHooks = kSingHookPhaseReset; }, "the phase thrown away every frame" );
+	add( "sing-memory", runSingMemory, []( Perturb& p ) { p.singMemorySeconds = 1e-5; }, "a sung coil with no channel memory" );
+	add( "device", runDevice, []( Perturb& p ) { p.pitchHooks = sing::kHookMenuByIndex; }, "devices valued by their place in the menu" );
+	add( "sing-picture", runSingPicture, []( Perturb& p ) { p.singPitchScale = 1.01; }, "expect the rate 1% above the detected pitch" );
+	add( "off", runOff, []( Perturb& p ) { p.singOn = true; }, "Pitch Source moved too" );
+	add( "off", runOff, []( Perturb& p ) { p.pitchHooks = sing::kHookEagerDevices; }, "devices listed at construction, as eidophone does" );
+	add( "lamp", runLamp, []( Perturb& p ) { p.expectLamp = static_cast< int >( sing::Lamp::Silent ); }, "expect red where it is Running" );
+	add( "lamp", runLamp, []( Perturb& p ) { p.expectLeak = true; }, "expect the lamp's blend left behind" );
+	add( "resize-sing", runResizeSing, []( Perturb& p ) { p.recreateOnInit = true; }, "a pitch input made anew by InitGL" );
 
 	if( only != nullptr )
 		cases.erase( std::remove_if( cases.begin(), cases.end(), [ & ]( const Case& c ) { return only->count( c.name ) == 0; } ),
@@ -1883,7 +2301,7 @@ int runNegative( const std::set< std::string >* only = nullptr )
 //===========================================================================
 // --bench
 //===========================================================================
-int runBench( const std::vector< std::string >& settings, int only )
+int runBench( const std::vector< std::string >& settings, int only, const std::vector< int >& heights, const Signal* signal )
 {
 	std::printf( "\n=== bench: GPU ms/frame through ProcessOpenGL, and the engine's CPU ms/frame\n" );
 	std::printf( "  (this machine was shared with other work while it ran: the load average is printed)\n" );
@@ -1895,20 +2313,20 @@ int runBench( const std::vector< std::string >& settings, int only )
 	GLuint query = 0;
 	glGenQueries( 1, &query );
 	for( int m = 0; m < static_cast< int >( Machine::Count ); ++m )
-		for( const auto& size : { std::pair< int, int >( 1280, 720 ), std::pair< int, int >( 1920, 1080 ), std::pair< int, int >( 3840, 2160 ) } )
+		for( const int h : heights )
 		{
 			if( only >= 0 && m != only )
 				continue;
+			const std::pair< int, int > size( h * 16 / 9, h );
 			Rig rig;
 			if( !rig.Init( size.first, size.second, false, nullptr, true ) )
 				return 1;
 			rig.Set( PT_MACHINE, static_cast< float >( m ) );
 			for( const std::string& setting : settings )
-			{
-				const size_t eq = setting.find( '=' );
-				if( eq == std::string::npos || !rig.Set( setting.substr( 0, eq ), std::strtof( setting.substr( eq + 1 ).c_str(), nullptr ) ) )
+				if( !rig.Apply( setting ) )
 					return 2;
-			}
+			rig.audio.signal = signal;
+			rig.audio.loop   = true;
 			rig.Render( 90 );
 			glFinish();
 			constexpr int kTimed = 180;
@@ -2019,7 +2437,7 @@ float valueAt( const Track& track, int frame )
 }
 
 int runPipe( int width, int height, bool effect, const std::string& scriptPath, int filmFrames, bool beat,
-             const std::vector< std::string >& settings )
+             const std::vector< std::string >& settings, const Signal* signal )
 {
 	Rig rig;
 	if( !rig.Init( width, height, effect ) )
@@ -2029,12 +2447,11 @@ int runPipe( int width, int height, bool effect, const std::string& scriptPath, 
 	}
 	if( beat )
 		rig.feed = AudioFeed::Pulses;
+	rig.audio.signal = signal;
+	rig.audio.loop   = true;
 	for( const std::string& s : settings )
-	{
-		const size_t eq = s.find( '=' );
-		if( eq == std::string::npos || !rig.Set( s.substr( 0, eq ), std::strtof( s.substr( eq + 1 ).c_str(), nullptr ) ) )
-			return 2;// Set() has said which name
-	}
+		if( !rig.Apply( s ) )
+			return 2;// ParseSetting has said what
 	std::map< unsigned int, Track > automation;
 	if( !scriptPath.empty() )
 	{
@@ -2135,6 +2552,11 @@ int main( int argc, char** argv )
 	int filmFrames = -1;
 	std::vector< int > fireFrames;
 	bool sizeGiven = false;
+	std::vector< int > benchHeights = { 720, 1080, 2160 };
+	Signal heard;
+	bool haveSignal = false;
+	std::string demoDir;
+	std::set< std::string > onlyNegatives;
 
 	// Every check, and whether it needs a GL context. This is the ONE place
 	// that says so: --offline is the checks marked false here, with their
@@ -2154,6 +2576,11 @@ int main( int argc, char** argv )
 		{ "light", { runLight, true } },              { "exposure", { runExposure, true } },
 		{ "determinism", { runDeterminism, true } },  { "over", { runOver, true } },
 		{ "onset", { runOnset, true } },              { "state", { runState, true } },
+		// The singing coil (Singing.inc).
+		{ "sing", { runSing, false } },               { "sing-clock", { runSingClock, false } },
+		{ "sing-memory", { runSingMemory, false } },  { "device", { runDevice, false } },
+		{ "sing-picture", { runSingPicture, true } }, { "off", { runOff, true } },
+		{ "lamp", { runLamp, true } },                { "resize-sing", { runResizeSing, true } },
 	};
 
 	for( int i = 1; i < argc; ++i )
@@ -2165,11 +2592,18 @@ int main( int argc, char** argv )
 			std::printf( "hvtest -- render Flyback offline and measure its discharges\n\n"
 			             "  --out PATH   --size WxH   --frames N   --machine N   --preset N   --effect\n"
 			             "  --fire N (press Fire on frame N; repeatable)   --beat   --set \"Name=V\"\n"
-			             "  --list   --film N --script CUES   --pipe\n\n"
+			             "  --list   --film N --script CUES   --pipe\n"
+			             "  --tone HZ[@DB] | --wav PATH   audio for the singing coil, looped, fed as if from a device\n"
+			             "                                (sets FLYBACK_NO_DEVICES=1: nothing else is opened)\n\n"
 			             "  --laplace --dimension --ladder --tesla --vdg --kirchhoff --light --exposure\n"
-			             "  --determinism --over --onset --defaults --names --state --negative --bench\n"
+			             "  --determinism --over --onset --defaults --names --state --negative [--only a,b] --bench [--sizes 720,1080]\n"
+			             "  --sing --sing-clock --sing-memory --device --sing-picture --off --lamp --resize-sing\n"
+			             "  --demo-music DIR   every .wav in DIR through the singing coil: a report\n"
+			             "  --trap-probe       reach CoreAudio three ways (only under tools/catrap's dylib)\n"
 			             "  --offline   every check that needs no GL context, and their negative controls\n"
-			             "  a pixel check with --size WxH runs at that raster instead of its own\n" );
+			             "  a pixel check with --size WxH runs at that raster instead of its own\n"
+			             "  HVTEST_RENDERER=software: Apple's software renderer. HVTEST_REAL_DEVICES=1: real capture\n"
+			             "  devices instead of the scripted ones (never in verify.sh)\n" );
 			return 0;
 		}
 		else if( a == "--out" && next )
@@ -2197,6 +2631,69 @@ int main( int argc, char** argv )
 		}
 		else if( a == "--script" && next )
 			scriptPath = argv[ ++i ];
+		else if( a == "--tone" && next )
+		{
+			const std::string v = argv[ ++i ];
+			const size_t at     = v.find( '@' );
+			char* end           = nullptr;
+			const double hz     = std::strtod( v.substr( 0, at ).c_str(), &end );
+			double db           = -20.0;
+			bool good           = end != nullptr && *end == '\0' && hz > 0.0 && std::isfinite( hz );
+			if( good && at != std::string::npos )
+			{
+				db   = std::strtod( v.substr( at + 1 ).c_str(), &end );
+				good = end != nullptr && *end == '\0' && std::isfinite( db );
+			}
+			if( !good )
+			{
+				std::fprintf( stderr, "--tone wants HZ or HZ@DB, got '%s'\n", v.c_str() );
+				return 2;
+			}
+			heard      = Tone( hz, db, 10.0 );
+			haveSignal = true;
+		}
+		else if( a == "--wav" && next )
+		{
+			std::string error;
+			if( !ReadWav( argv[ ++i ], heard, error ) )
+			{
+				std::fprintf( stderr, "%s\n", error.c_str() );
+				return 2;
+			}
+			haveSignal = true;
+		}
+		else if( a == "--sizes" && next )
+		{
+			benchHeights.clear();
+			std::stringstream list( argv[ ++i ] );
+			std::string item;
+			while( std::getline( list, item, ',' ) )
+			{
+				char* end    = nullptr;
+				const long h = std::strtol( item.c_str(), &end, 10 );
+				if( end == nullptr || *end != '\0' || h < 16 || h > 4320 )
+				{
+					std::fprintf( stderr, "--sizes wants heights like 720,1080, got '%s'\n", item.c_str() );
+					return 2;
+				}
+				benchHeights.push_back( static_cast< int >( h ) );
+			}
+		}
+		else if( a == "--demo-music" && next )
+		{
+			mode    = "demo-music";
+			demoDir = argv[ ++i ];
+		}
+		else if( a == "--trap-probe" )
+			mode = "trap-probe";
+		else if( a == "--only" && next )
+		{
+			std::stringstream list( argv[ ++i ] );
+			std::string item;
+			while( std::getline( list, item, ',' ) )
+				if( !item.empty() )
+					onlyNegatives.insert( item );
+		}
 		else if( a == "--size" && next )
 		{
 			const std::string v = argv[ ++i ];
@@ -2229,6 +2726,21 @@ int main( int argc, char** argv )
 	const Perturb none;
 	if( sizeGiven && mode != "pipe" && mode != "bench" )
 		g_rasters = { { width, height } };
+	// The singing coil: no check, render or pipe here opens a real capture
+	// device. Every earshot engine gets the scripted backend unless asked.
+	{
+		const char* real = std::getenv( "HVTEST_REAL_DEVICES" );
+		if( !( real != nullptr && *real != '\0' && std::strcmp( real, "0" ) != 0 ) )
+			sing::PitchInput::SetBackendFactoryForTest( makeScripted );
+	}
+	// Audio given on the command line is the only thing earshot hears.
+	if( haveSignal )
+		setenv( "FLYBACK_NO_DEVICES", "1", 1 );
+	const Signal* audio = haveSignal ? &heard : nullptr;
+	if( mode == "trap-probe" )
+		return runTrapProbe();
+	if( mode == "demo-music" )
+		return runDemoMusic( demoDir );
 	// --pipe and --film write frames on stdout: a reader that hangs up must be
 	// an error return from write(), reported, not a silent SIGPIPE (141).
 	signal( SIGPIPE, SIG_IGN );
@@ -2293,11 +2805,11 @@ int main( int argc, char** argv )
 	if( checks.count( mode ) )
 		result = checks.at( mode ).run( none );
 	else if( mode == "negative" )
-		result = runNegative();
+		result = onlyNegatives.empty() ? runNegative() : runNegative( &onlyNegatives );
 	else if( mode == "bench" )
-		result = runBench( settings, machine );
+		result = runBench( settings, machine, benchHeights, audio );
 	else if( mode == "pipe" )
-		result = runPipe( width, height, effect, scriptPath, filmFrames, beat, settings );
+		result = runPipe( width, height, effect, scriptPath, filmFrames, beat, settings, audio );
 	else
 	{
 		Rig rig;
@@ -2306,13 +2818,12 @@ int main( int argc, char** argv )
 		else
 		{
 			for( const std::string& s : settings )
-			{
-				const size_t eq = s.find( '=' );
-				if( eq == std::string::npos || !rig.Set( s.substr( 0, eq ), std::strtof( s.substr( eq + 1 ).c_str(), nullptr ) ) )
+				if( !rig.Apply( s ) )
 					return 2;
-			}
 			if( beat )
 				rig.feed = AudioFeed::Pulses;
+			rig.audio.signal = audio;
+			rig.audio.loop   = true;
 			for( int f = 0; f < std::max( frames, 1 ) && result == 0; ++f )
 			{
 				if( std::find( fireFrames.begin(), fireFrames.end(), f ) != fireFrames.end() )
