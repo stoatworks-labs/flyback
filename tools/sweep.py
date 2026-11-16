@@ -92,12 +92,26 @@ SWEEP = {
     "Position Y": ("0.3", "0.7", [], []),
     "Scale": ("0.3", "0.7", [], []),
     "Rotation": ("0.3", "0.7", [], []),
+    # The singing coil, a Tesla coil's interrupter at the pitch of a 220 Hz tone
+    # fed through earshot (--tone, which also stops any device being opened).
+    # Off sings nothing (the coil keeps its 120 BPS); on, 220 BPS and the lamp.
+    "Pitch Source": ("Off (BPS)", "System default", [f"Machine={TESLA}"], ["tone=220"]),
+    # 220 Hz at -4 octaves is 13.75 BPS, at +2 it is 880: short streamers, long.
+    "Octave": ("-4", "+2", [f"Machine={TESLA}", "Pitch Source=System default"], ["tone=220"]),
+    # A -30 dBFS tone sings under a -100 dBFS gate and rests under -20.
+    "Gate": ("0", "1", [f"Machine={TESLA}", "Pitch Source=System default"], ["tone=220@-30"]),
 }
 
 # Parameters with no pixel to sweep: the FFT buffer (its float is
 # meaningless; Audio Fires and Audio Drive are its sweepable proof) and the
 # About block (a text line and browser buttons).
-SKIP = {"Audio", "About", "Project page", "Source on GitHub", "Support the work", "User guide"}
+SKIP = {"Audio", "About", "Project page", "Source on GitHub", "Support the work", "User guide",
+        # Rescan Inputs re-lists the capture devices and refills Pitch Source's
+        # menu: it changes what the menu offers, never a pixel, and here (the
+        # harness's scripted devices, or none under --tone) there is nothing new
+        # to find. hvtest --device is its check: Rescan finds a device plugged
+        # in after the list was made, and opens a remembered one by name.
+        "Rescan Inputs"}
 
 
 def read_png(path):
@@ -142,6 +156,9 @@ def render(hvtest, out, settings, extra, frames=48):
         args.append("--beat")
     if "fire" in extra:
         args += ["--fire", str(frames - 1)]
+    for e in extra:
+        if e.startswith("tone="):
+            args += ["--tone", e.split("=", 1)[1]]
     for setting in settings:
         args += ["--set", setting]
     result = subprocess.run(args, capture_output=True, text=True)

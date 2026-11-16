@@ -187,6 +187,13 @@ if(FLYBACK_BUILD_TOOLS AND APPLE)
         "-framework OpenGL"
         "-framework AppKit"
     )
+    # The CoreAudio trap verify.sh runs the mode-off path under (and hvtest
+    # --trap-probe, its negative control): tools/catrap/catrap.cpp.
+    add_library(catrap SHARED tools/catrap/catrap.cpp)
+    target_link_libraries(catrap PRIVATE
+        "-framework CoreAudio"
+        "-framework AudioToolbox"
+    )
 endif()
 
 # ---------------------------------------------------------------------------

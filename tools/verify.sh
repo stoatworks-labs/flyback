@@ -47,7 +47,7 @@ reserved_words() {
 	local bad=0 word
 	for word in $words; do
 		if grep -nE "(float|int|uint|bool|vec[234]|ivec[234]|uvec[234]|mat[234])[[:space:]]+$word[[:space:]]*[;=,)]" \
-		            source/render/Shaders.cpp >/dev/null 2>&1; then
+		            source/render/Shaders.cpp source/render/Lamp.cpp >/dev/null 2>&1; then
 			printf '   "%s" is declared as an identifier and is a GLSL reserved word\n' "$word"
 			bad=$(( bad + 1 ))
 		fi
@@ -87,6 +87,25 @@ step "Submodule"
 pin="$(git -C external/ffgl rev-parse --short=7 HEAD)"
 [[ "$pin" == "b1afaf9" ]] || fail "FFGL SDK at $pin, not the fleet's b1afaf9"
 pass "FFGL SDK pinned at $pin"
+
+step "earshot snapshot"
+# external/earshot is `git archive` of one commit, unmodified (SNAPSHOT says
+# which, and whether anything was patched: nothing). Where the earshot checkout
+# is on this machine, the snapshot is compared with that commit file for file
+# (eidophone's step).
+snap="$( sed -n 's/^Commit:[[:space:]]*\([0-9a-f]\{7,\}\).*/\1/p' external/earshot/SNAPSHOT )"
+[[ -n "$snap" ]] || fail "external/earshot/SNAPSHOT names no commit"
+grep -q "$snap" AGENTS.md || fail "AGENTS.md does not record the earshot commit $snap"
+EARSHOT="${EARSHOT:-$HOME/dev/earshot}"
+if git -C "$EARSHOT" cat-file -e "$snap^{commit}" 2>/dev/null; then
+	tmp="$( mktemp -d )"
+	git -C "$EARSHOT" archive "$snap" | tar -x -C "$tmp"
+	diff -r -x SNAPSHOT "$tmp" external/earshot >/dev/null || { diff -rq -x SNAPSHOT "$tmp" external/earshot | head; rm -rf "$tmp"; fail "external/earshot differs from earshot $snap"; }
+	rm -rf "$tmp"
+	pass "external/earshot is earshot $snap, file for file"
+else
+	pass "SNAPSHOT and AGENTS.md agree on $snap (no earshot checkout at $EARSHOT to compare the files with)"
+fi
 
 step "Build (fresh, universal, Release)"
 rm -rf "$BUILD"
@@ -159,6 +178,66 @@ check_bundle() {
 check_bundle "Flyback" "com.stoatworks.ffgl.flyback" "HV01" "SW Flyback" "source"
 check_bundle "Flyback Over" "com.stoatworks.ffgl.flyback.over" "HV02" "SW Flyback Over" "effect"
 
+step "CoreAudio, never, with the singing mode off"
+# Pitch Source is Off by default, and Off must not reach CoreAudio at all: no
+# earshot engine, no device list, no select (listDevices and selectDevice both
+# start CoreAudio). libcatrap (tools/catrap) logs and refuses every CoreAudio
+# dlopen and every direct HAL or component call; the mode-off path runs under
+# it -- a host loading both bundles and rendering them (oxbow probe and
+# selftest), and hvtest's --off, --defaults, --list and a film of each machine
+# -- and the log must show the trap loaded in each process and no HIT. The
+# negative control is `hvtest --trap-probe`, which reaches CoreAudio three
+# ways under the same trap and must leave HITs. HVTEST_REAL_DEVICES=1 keeps
+# hvtest's scripted backend out of it: anything that started would go to
+# miniaudio, and so into the trap. No FLYBACK_NO_DEVICES here: the gate would
+# hide what this looks for. (Run from bash, never through perl or env: a SIP
+# binary strips DYLD_*.)
+TRAP="$BUILD/libcatrap.dylib"
+[[ -f "$TRAP" ]] || fail "no $TRAP"
+traplog="$( mktemp )"
+trapped() { CATRAP_LOG="$traplog" HVTEST_REAL_DEVICES=1 DYLD_INSERT_LIBRARIES="$TRAP" "$@"; }
+runs=0
+if [[ -x "$OXBOW" ]]; then
+	for name in "Flyback" "Flyback Over"; do
+		trapped "$OXBOW" probe "$BUILD/$name.bundle" >/dev/null 2>&1 || fail "oxbow probe under the trap: $name"
+		self="$( trapped "$OXBOW" selftest "$BUILD/$name.bundle" 2>&1 || true )"
+		grep -q 'selftest:[[:space:]]*PASS' <<<"$self" || fail "oxbow selftest under the trap: $name"
+		runs=$(( runs + 2 ))
+	done
+else
+	fail "no oxbow at $OXBOW: the trap needs a host (set OXBOW=...)"
+fi
+for check in off defaults; do
+	trapped "$BUILD/hvtest" "--$check" >/dev/null 2>&1 || fail "hvtest --$check under the trap"
+	runs=$(( runs + 1 ))
+done
+trapped "$BUILD/hvtest" --list >/dev/null 2>&1 || fail "hvtest --list under the trap"
+runs=$(( runs + 1 ))
+for machine in 0 1 2 3 4; do
+	trapped "$BUILD/hvtest" --film 30 --size 160x90 --machine "$machine" >/dev/null 2>&1 || fail "hvtest --film (machine $machine) under the trap"
+	runs=$(( runs + 1 ))
+done
+head -c $(( 160 * 90 * 4 * 30 )) /dev/zero | trapped "$BUILD/hvtest" --pipe --effect --size 160x90 >/dev/null 2>&1 || fail "hvtest --pipe --effect under the trap"
+runs=$(( runs + 1 ))
+loaded=$( grep -c '^loaded ' "$traplog" || true )
+hits=$( grep -c '^HIT ' "$traplog" || true )
+[[ "$loaded" -eq "$runs" ]] || { cat "$traplog"; fail "the trap loaded in $loaded of $runs processes"; }
+[[ "$hits" -eq 0 ]] || { grep '^HIT ' "$traplog" | sort | uniq -c; fail "the mode-off path reached CoreAudio $hits time(s)"; }
+pass "mode off: $runs processes (oxbow probe and selftest on both bundles, hvtest --off --defaults --list, a film of each machine, the effect's pipe), the trap loaded in all, 0 CoreAudio calls"
+: >"$traplog"
+probe="$( trapped "$BUILD/hvtest" --trap-probe 2>&1 )" || { printf '%s\n' "$probe"; fail "hvtest --trap-probe did not run under the trap"; }
+for what in "dlopen /System/Library/Frameworks/CoreAudio.framework" "AudioObjectGetPropertyDataSize"; do
+	grep -q "^HIT .*$what" "$traplog" || { cat "$traplog"; fail "the negative control reached CoreAudio and the trap did not log '$what'"; }
+done
+pass "negative control: hvtest --trap-probe reaches CoreAudio and the trap logs $( grep -c '^HIT ' "$traplog" ) HITs (listDevices' dlopen, a direct HAL call, an eager pitch input's dlopen)"
+set +e
+"$BUILD/hvtest" --trap-probe >/dev/null 2>&1
+status=$?
+set -e
+[[ "$status" -eq 2 ]] || fail "hvtest --trap-probe without the trap gave exit $status, not 2 (it must refuse)"
+pass "without the trap, --trap-probe refuses (exit 2) rather than ask the OS for devices"
+rm -f "$traplog"
+
 step "Checks"
 # Every claim the README makes, in the order it makes them. Physics first
 # (engine only, no GPU), then the pixel checks at their development rasters.
@@ -174,15 +253,30 @@ run_check() {
 	fi
 	rm -f "$log"
 }
-for check in laplace dimension ladder tesla vdg kirchhoff light exposure determinism over onset defaults names state; do
+for check in laplace dimension ladder tesla vdg kirchhoff light exposure determinism over onset defaults names state \
+             sing sing-clock sing-memory device sing-picture off lamp resize-sing; do
 	run_check "--$check"
 done
 
 step "Pixel checks at 320x180 (CI's raster)"
 # Every check that touches a pixel or the GPU, again at 320x180, with its
 # negative controls there too. The physics checks have no raster to change.
-for check in light exposure determinism over onset state; do
+for check in light exposure determinism over onset state sing-picture off lamp resize-sing; do
 	run_check "--$check" --size 320x180
+done
+
+step "The singing coil's pixel checks on Apple's software renderer"
+# A second rasteriser (BRIEF-ADDENDUM), at both rasters. On it --off compares
+# the engine's frames bit for bit and reports the pixels without claiming them:
+# that renderer does not reproduce its own output run to run.
+for size in "" "320x180"; do
+	for check in sing-picture off lamp resize-sing; do
+		if [ -n "$size" ]; then
+			HVTEST_RENDERER=software run_check "--$check" --size "$size"
+		else
+			HVTEST_RENDERER=software run_check "--$check"
+		fi
+	done
 done
 
 step "Negative controls"
@@ -262,6 +356,37 @@ if [ "$status" -eq 1 ]; then
 else
 	fail "--film into a closed stdout gave exit $status, not 1"
 fi
+# The same, singing: a tone through earshot, the Tesla's interrupter at its
+# pitch, the lamp drawn. 2.5 frames in, 2 out; a hung-up reader is exit 1.
+sing=( --tone 220 --set "Machine=1" --set "Pitch Source=System default" )
+head -c $(( frame * 5 / 2 )) /dev/zero > "$raw"
+set +e
+got=$( "$HVTEST" --pipe --effect --size 64x36 "${sing[@]}" < "$raw" 2>/dev/null | wc -c | tr -d ' '; exit "${PIPESTATUS[0]}" )
+status=$?
+set -e
+if [ "$status" -eq 0 ] && [ "$got" = "$(( frame * 2 ))" ]; then
+	pass "singing: 2.5 frames in, exactly 2 frames out, clean exit"
+else
+	fail "singing: 2.5 frames in gave $got bytes out (want $(( frame * 2 ))), exit $status"
+fi
+head -c $(( frame * 20 )) /dev/zero > "$raw"
+set +e
+"$HVTEST" --pipe --effect --size 64x36 "${sing[@]}" < "$raw" 2>/dev/null | head -c 1 >/dev/null
+status=${PIPESTATUS[0]}
+set -e
+[ "$status" -eq 1 ] || fail "singing: a closed stdout gave exit $status, not 1"
+set +e
+"$HVTEST" --film 20 --size 64x36 "${sing[@]}" 2>/dev/null | head -c 1 >/dev/null
+status=${PIPESTATUS[0]}
+set -e
+[ "$status" -eq 1 ] || fail "singing: --film into a closed stdout gave exit $status, not 1"
+pass "singing: a closed stdout ends --pipe and --film with exit 1, not SIGPIPE"
+set +e
+"$HVTEST" --film 2 --size 64x36 --set "Pitch Source=Nowhere" >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail "--set naming no option of Pitch Source gave exit $status, not 2"
+pass "--set refuses an option name that is not one (exit 2)"
 rm -f "$raw" "$cues"
 
 step "Dead controls"
@@ -269,6 +394,9 @@ python3 tools/sweep.py --build "$BUILD" || fail "a control is dead or barely ali
 pass "every control changes the picture where it applies"
 
 step "Cost"
-"$BUILD/hvtest" --bench
+# 720p and 1080p (a shared machine: no 4K loops). The machines on their
+# defaults, the singing mode off; then the Tesla singing a 220 Hz tone.
+"$BUILD/hvtest" --bench --sizes 720,1080
+"$BUILD/hvtest" --bench --sizes 720,1080 --machine 1 --tone 220 --set "Pitch Source=System default"
 
 printf '\n\033[32mall green: %d steps passed\033[0m\n' "$PASSED"

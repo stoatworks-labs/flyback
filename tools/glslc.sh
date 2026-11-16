@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Every shader in source/render/Shaders.cpp through a real GLSL compiler.
+# Every shader in source/render/Shaders.cpp (and the singing lamp's, in
+# source/render/Lamp.cpp) through a real GLSL compiler.
 # A shader that will not compile is "the plugin does nothing" in a host, with
 # the message in a log file.
 #
@@ -33,7 +34,7 @@ trap 'rm -rf "$dir"' EXIT
 python3 - "$dir" <<'SHADERS_PY'
 import re, sys, pathlib
 out = pathlib.Path( sys.argv[ 1 ] )
-FILES = [ "source/render/Shaders.cpp" ]
+FILES = [ "source/render/Shaders.cpp", "source/render/Lamp.cpp" ]
 for f in FILES:
 	text = pathlib.Path( f ).read_text()
 	named = {}

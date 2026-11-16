@@ -158,11 +158,18 @@ int runSing( const Perturb& perturb )
 			Check( false, fmt( "%.2f Hz: the coil never sang", c.hz ) );
 			continue;
 		}
+		// Counted from the first sounding step's start INCLUSIVE: nothing came
+		// before it (a rest), so a bang at exactly a would be a cycle owed to
+		// the silence -- the phase a rest must zero.
 		const double a = run.frames[ first ].t0, b = run.frames.back().t1;
-		int bangs      = 0;
+		int bangs      = 0, before = 0;
 		for( const Event& e : run.events )
-			if( e.time > a && e.time <= b )
+		{
+			if( e.time >= a && e.time <= b )
 				++bangs;
+			if( e.time < a )
+				++before;
+		}
 		const double expected = RateIntegral( run, a, b, perturb.singPitchScale );
 		// A phase accumulator that starts at 0 (after a rest) and ends in
 		// [0, 1) has crossed floor( integral ) whole cycles: the count is the
@@ -188,10 +195,10 @@ int runSing( const Perturb& perturb )
 			}
 		}
 		const int span = static_cast< int >( run.frames.size() - first );
-		Check( bangs > 0 && expected - bangs < 1.0 + rounding && bangs <= expected + rounding,
-		       fmt( "%7.2f Hz, octave %+d: %d bangs from %.3f s to %.3f s; the detected pitch's rate integrates to %.4f there "
-		            "(the count must be that less a fraction of one)",
-		            c.hz, c.octaves, bangs, a, b, expected ) );
+		Check( bangs > 0 && before == 0 && expected - bangs < 1.0 + rounding && bangs <= expected + rounding,
+		       fmt( "%7.2f Hz, octave %+d: %d bangs in [%.3f, %.3f] s (%d before, in the window's warm-up); the detected pitch's rate "
+		            "integrates to %.4f there (the count must be that less a fraction of one)",
+		            c.hz, c.octaves, bangs, a, b, before, expected ) );
 		const std::string folded = kSeen == 0 ? std::string() : fmt( ", folded %+d", kSeen );
 		Check( foldBad == 0 && sounding == span && voiced >= span - 2 && worstCents <= 1.0,
 		       fmt( "%7.2f Hz, octave %+d: %.4f BPS = the note x 2^(%+d%s) exactly on %d of %d frames, sounding on %d; voiced on %d; "
