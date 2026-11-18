@@ -1,5 +1,5 @@
 earshot snapshot for flyback
-Source:   ~/dev/earshot (local repo, never pushed; intended home github.com/stoatworks-labs/earshot)
+Source:   https://github.com/stoatworks-labs/earshot
 Commit:   8124191 (estest: a negative control for every check, enforced)
 Taken:    2026-11-16, with `git archive 8124191`, unmodified.
 Patches:  none.

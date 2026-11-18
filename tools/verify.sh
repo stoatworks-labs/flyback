@@ -96,7 +96,7 @@ step "earshot snapshot"
 snap="$( sed -n 's/^Commit:[[:space:]]*\([0-9a-f]\{7,\}\).*/\1/p' external/earshot/SNAPSHOT )"
 [[ -n "$snap" ]] || fail "external/earshot/SNAPSHOT names no commit"
 grep -q "$snap" AGENTS.md || fail "AGENTS.md does not record the earshot commit $snap"
-EARSHOT="${EARSHOT:-$HOME/dev/earshot}"
+EARSHOT="${EARSHOT:-$HOME/Projects/resolume/earshot}"
 if git -C "$EARSHOT" cat-file -e "$snap^{commit}" 2>/dev/null; then
 	tmp="$( mktemp -d )"
 	git -C "$EARSHOT" archive "$snap" | tar -x -C "$tmp"
