@@ -40,17 +40,13 @@ endif()
 option(FLYBACK_BUILD_TOOLS "Build the offline render and measurement harness" ON)
 
 # The singing Tesla coil needs live pitch, which is earshot (a snapshot under
-# external/earshot; the commit is in external/earshot/SNAPSHOT). earshot has
-# never been compiled by MSVC (its README says so), so it is ON where it has
-# been built and tested -- macOS -- and OFF elsewhere until a Windows build of
-# it is proven. OFF compiles a stub: the parameters are declared identically,
-# so a composition loads the same, and the lamp says no device can open.
-if(APPLE)
-    set(FLYBACK_SINGING_DEFAULT ON)
-else()
-    set(FLYBACK_SINGING_DEFAULT OFF)
-endif()
-option(FLYBACK_SINGING "Live pitch for the singing Tesla coil (earshot)" ${FLYBACK_SINGING_DEFAULT})
+# external/earshot; the commit is in external/earshot/SNAPSHOT). ON on every
+# platform. Until v0.2.0 it was OFF off macOS because earshot had never been
+# compiled by MSVC; it has been since (needle's CI, and woofer, rubens,
+# eidophone and marbling ship Windows DLLs with this same snapshot inside).
+# OFF compiles a stub: the parameters are declared identically, so a
+# composition loads the same, and the lamp says no device can open.
+option(FLYBACK_SINGING "Live pitch for the singing Tesla coil (earshot)" ON)
 
 # ---------------------------------------------------------------------------
 # The Resolume FFGL SDK, as a git submodule under external/.
