@@ -361,7 +361,10 @@ Assumed, or not yet done:
   clock votes milliseconds, and Resolume's FFT reaches Audio Fires (Beat
   001.wav, Audio on Composition, BPS off: bangs at 1, none at 0). Pitch Source
   was never switched on there (every choice above Off opens a real device).
-  Arena 7.27.1 on win-lab: the gate (README's Status). Still unknown: how the
+  Arena 7.27.1 on win-lab: the gate (README's Status). Its single-frame grabs
+  can't reliably see the intermittent controls (Rod Length, Rise Speed, Target
+  Y, the Over's Sphere Finish): which land inconclusive, or fail, changes from
+  run to run, and the harness shows each one acting. Still unknown: how the
   panel presents, whether the X/Y pairs show as pads (REST calls them
   ParamRange), and what the 64 bins hold for a known tone.
 - **Windows is built by CI only** (MSVC, `ci.yml` and `release.yml`), and run

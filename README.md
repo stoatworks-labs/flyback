@@ -243,26 +243,33 @@ does and finds `SW Flyback` / `HV01` / source and `SW Flyback Over` / `HV02` /
 effect, and `oxbow selftest` instantiates each one through the host's own path
 and renders.
 
-**Windows, in Resolume Arena 7.27.1** (win-lab, Mesa llvmpipe, no GPU).
-v0.2.0's release-workflow DLLs, 2026-11-19: both plugins load from Extra
+**Windows, in Resolume Arena 7.27.1** (win-lab, Mesa llvmpipe, no GPU). The
+DLLs in the v0.2.0 release's own zip, 2026-11-19: both plugins load from Extra
 Effects and register with the right id and type, all 58 (source) and 59
 (effect) host controls match what the plugins declare (v0.1.0's 54 and 55
 unchanged, the Singing group after them), both render, Arena's log stays clean
-and Arena is the same process throughout. 39 of the source's controls and 38
-of the effect's moved the picture; Rod Length and Rise Speed (source) and Rise
-Speed and Sphere Finish (effect) were inconclusive, acting through discharges
-that come and go between the gate's single-frame grabs. **The effect's Finger,
-Finger X and Finger Y change nothing over the gate's clip**, and that is
-v0.1.0's code: in the Over the finger goes to the glass nearest the clip's
-brightest region, which the clip already grounds, so over a clip with bright
-parts it adds nothing (the harness agrees, frame for frame; over a black clip
-it acts). The singing controls were skipped, because win-lab has no sound
-device, so they were tried by hand there: with Pitch Source on System default,
-WASAPI lists no device, earshot reports the default input missing and keeps
-retrying, the lamp lights in the corner, Rescan Inputs, Octave and Gate move
-without harm, and back on Off the lamp goes and the picture is the coil again,
-with Arena the same process from start to end. v0.1.0 (2026-09-24) passed the
-same gate's checks. Software rendering says nothing about a GPU or about speed.
+and Arena is the same process throughout. 38 of the source's controls and 39 of
+the effect's moved the picture. Rod Length, Rise Speed and Target Y (source)
+were inconclusive, and the effect's Sphere Finish measured just above the
+gate's floor and failed it. Each acts through discharges that come and go
+between the gate's single-frame grabs (and Arena's thumbnail served the bare
+clip to nine of the effect's grabs). A run on the release workflow's DLLs
+before the tag caught a different few, all inconclusive: Rod Length and Rise
+Speed in the source, Rise Speed and Sphere Finish in the effect. In the harness
+Sphere Finish acts in the Over as it does in the source (polished sparks, rough
+sits in corona), changing the frame by about as much as it does there. **The
+effect's Finger, Finger X and Finger Y change nothing over the gate's clip**,
+and that is v0.1.0's code: in the Over the finger goes to the glass nearest the
+clip's brightest region, which the clip already grounds, so over a clip with
+bright parts it adds nothing (the harness agrees, frame for frame; over a black
+clip it acts). The singing controls were skipped, because win-lab has no sound
+device, so a separate script tried them there: with Pitch Source on System
+default, WASAPI lists no device, earshot reports the default input missing and
+keeps retrying, the lamp lights in the corner, Rescan Inputs, Octave and Gate
+move without harm, and back on Off the lamp goes and the picture is the coil
+again, with Arena the same process from start to end. v0.1.0 (2026-09-24)
+passed the same gate's checks. Software rendering says nothing about a GPU or
+about speed.
 
 There's a [user guide](docs/USER-GUIDE.md) and a
 [browser demo](https://flyback-demo.stoatworks-labs.com/), but no OpenFX port.

@@ -34,7 +34,7 @@ from Resolume.*
 > on the beat. The singing coil wasn't switched on there, because every choice above Off opens a
 > real input.
 > On Windows, v0.2.0 loads, registers and renders in Resolume Arena 7.27.1, with every control
-> matching what the plugins declare, and 39 of the source's and 38 of the effect's controls shown
+> matching what the plugins declare, and 38 of the source's and 39 of the effect's controls shown
 > moving the picture. That was on software rendering, so it says nothing about a GPU. A few
 > controls act through discharges that come and go between the test's single frames and couldn't
 > be shown there. With no sound device on that machine, switching the singing coil on only lit the
