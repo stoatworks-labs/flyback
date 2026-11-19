@@ -15,7 +15,7 @@ breaks and how much energy the spark carries.
 one striking the grounded base. Rendered by the plugin's offline harness rather than captured
 from Resolume.*
 
-> **Before you rely on this:** it's released at **v0.1.0**, and it's still early days. The
+> **Before you rely on this:** it's released at **v0.2.0**, and it's still early days. The
 > physics is measured rather than asserted, by a harness that drives the real plugin class in a
 > headless GL context, and the engine on its own where a claim doesn't need a GPU. The potential
 > solver holds to the coaxial closed form at every site, worst 0.039 against a bound derived from
@@ -349,7 +349,7 @@ For a coil that plays the *note* rather than the beat, see the Singing group.
 
 ## The Singing group
 
-*Added after v0.1.0.* A musical Tesla coil's interrupter fires once per period of the note it's
+*New in v0.2.0.* A musical Tesla coil's interrupter fires once per period of the note it's
 playing, so the crack of every bang *is* the note: 220 bangs a second sounds an A. The Singing
 group makes Flyback's coil do that. It listens to an audio input of its own, works out the pitch,
 and fires the interrupter at it instead of at **BPS**, which then reads **sung**. It only changes
@@ -360,10 +360,11 @@ The group sits at the very bottom of the panel, after About, so compositions sav
 load exactly as they were.
 
 **Pitch Source:** where the coil listens. **Off (BPS)**, the default, is the coil as it always
-was. **System default** is your Mac's default input; below it are your capture devices, by name.
-The list is filled the first time you switch Pitch Source on: until then it shows only Off,
-System default and spare **(none)** rows, because Flyback doesn't ask macOS about audio devices at
-all while the mode is off. It listens through its own capture, not Resolume's Audio picker: the
+was. **System default** is your computer's default input; below it are your capture devices, by
+name. The list is filled the first time you switch Pitch Source on: until then it shows only Off,
+System default and spare **(none)** rows, because Flyback doesn't ask the system about audio
+devices at all while the mode is off. **So picking a device takes two steps:** switch Pitch Source
+to System default, and the devices appear for you to pick from. It listens through its own capture, not Resolume's Audio picker: the
 spectrum Resolume hands a plugin has no pitch in it.
 
 **Rescan Inputs:** lists the devices again, for one you've plugged in since. It only acts while
@@ -372,7 +373,8 @@ Pitch Source is on.
 **Octave:** −4 to +2, default 0. The coil fires at the note times two to this power. Whatever
 you set, the rate is then folded by whole octaves into the coil's own 5 to 1000 bangs a second,
 so a high note keeps its pitch class rather than running away: a top E at 1318.5 Hz fires at
-659.3.
+659.3. A folded note is just as bright per bang; a real musical coil would shorten its pulses
+for a high note instead.
 
 **Gate:** −100 to −20 dBFS, default −60 in the middle. Sound below the Gate is a rest.
 
@@ -395,8 +397,9 @@ re-use the last bang's hot channel (see **BPS** and **Channel Memory**).
 how the input is doing:
 
 - **green:** sound is arriving.
-- **red:** the input is open but delivering pure silence. Usually that's macOS microphone
-  permission for Resolume, or an input with nothing patched to it.
+- **red:** the input is open but delivering pure silence. Usually that's microphone permission
+  for Resolume (macOS, or Windows's microphone privacy setting), or an input with nothing patched
+  to it.
 - **blinking red:** the device isn't connected. Flyback keeps trying, and never swaps in another.
 - **blinking amber:** the input is still opening.
 
@@ -407,10 +410,12 @@ the coil is sounding is a legato change of note (the interrupter carries straigh
 note-off is the level dropping below the Gate. Flyback doesn't take MIDI itself.
 
 **What's known and what's assumed.** One voice only: a chord sounds as whichever pitch is found.
-Every bang carries the same energy, so loud and soft notes look the same. The pitch tracking,
-the fold, the Gate and the bang timing are all measured by the harness on synthetic tones and on
-Resolume's demo clips, but **no real input has reached it in a host**, and on **Windows** the
-mode isn't built yet: the controls are there, but no device opens and the lamp stays blinking red.
+Every bang carries the same energy, so loud and soft notes look the same. There's no Clarity
+control: a moment counts as pitched at a fixed clarity of 0.80, so a noisy source may sustain a
+note more often than it sets one. The pitch tracking, the fold, the Gate and the bang timing are
+all measured by the harness on synthetic tones and on Resolume's demo clips, but **no real input
+has reached it in a host**. Since v0.2.0 the mode is built on **Windows** too, where it listens
+through the system's own audio (WASAPI); it has never heard a real input there either.
 
 ---
 
@@ -571,8 +576,12 @@ picker is set to a source.
 
 **The singing coil holds one note through a drum loop.** That's the sustain. Raise the Gate.
 
-**The lamp is red.** The input is delivering pure silence: check macOS has given Resolume the
-microphone, and that the input has something patched to it.
+**The lamp is red.** The input is delivering pure silence: check the system has given Resolume
+the microphone (System Settings on macOS, the microphone privacy setting on Windows), and that the
+input has something patched to it.
+
+**Pitch Source lists no devices.** They're listed the first time the mode is switched on. Pick
+System default first, then your device.
 
 **The effect does nothing at all.** A shader that won't compile looks just like that. The actual
 error is in the log:
@@ -611,7 +620,9 @@ a sweep fails if any control does nothing.
 - **No racing sparks down the Tesla coil's secondary**, and no corona on the coil.
 - **Presets override**, so while one is selected most sliders are inert (see Presets).
 - **The singing coil has only heard synthetic tones and Resolume's demo clips**, fed to it by the
-  harness, never a real input in a host. It isn't built on Windows yet.
+  harness, never a real input in a host, on macOS or Windows. Picking a device takes two steps,
+  high notes are folded rather than dimmed, there's no Clarity control, the Singing group sits
+  after About, and the lamp shows on every machine though only the Tesla coil sings.
 - **Not timed in a host, or on Windows.** No OpenFX version. There's a [browser demo](https://flyback-demo.stoatworks-labs.com), but it runs a JavaScript port of the engine that only a reader checks, so treat it as a preview rather than the plugin.
 
 ---

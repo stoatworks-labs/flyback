@@ -149,7 +149,7 @@ than a screen recording.*
   are ground, so strikes go into the picture and a globe's filaments gather to
   the brightest thing in frame.
 - **Layout:** Position X/Y, Scale and Rotation.
-- **Singing** (after About, and not in v0.1.0): Pitch Source (Off, System
+- **Singing** (after About, new in v0.2.0): Pitch Source (Off, System
   default, then your capture devices), Rescan Inputs, Octave (−4 to +2) and
   Gate (−100 to −20 dBFS). See [The singing coil](#the-singing-coil).
 
@@ -174,7 +174,7 @@ coil, and the coil over a test clip through `SW Flyback Over`.</sub>
 
 A musical Tesla coil's interrupter fires once per period of the note, so the
 crack of every bang *is* the note. Set **Pitch Source** to an input and the
-coil does that: it listens through [earshot](external/earshot/README.md) (its
+coil does that: it listens through [earshot](https://github.com/stoatworks-labs/earshot) (its
 own capture device, not Resolume's FFT, which has no pitch in it), and its
 interrupter fires at the detected pitch instead of at BPS, which then reads
 "sung". The rate is the note times 2^Octave, folded by whole octaves into the
@@ -197,14 +197,15 @@ on.
 
 With Pitch Source **Off**, the default, the plugin is v0.1.0's: it doesn't
 create an audio engine, list devices or make a single CoreAudio call, and its
-output is byte-for-byte origin/main's in every render compared (below). The
-four controls come after About, so a v0.1.0 composition loads as it was saved.
-On Windows the mode is compiled out for now (earshot hasn't been built with
-MSVC): the controls are there but no device opens.
+output is byte-for-byte v0.1.0's in every render compared (below). The four
+controls come after About, so a v0.1.0 composition loads as it was saved.
+v0.2.0 builds the mode on Windows too: earshot compiles under MSVC, as it does
+for the fleet's other audio plugins. On Windows it listens through WASAPI, and
+it has never heard a real input there (see Status).
 
 ## Status
 
-**v0.1.0, 2026-09-24, and still early days.**
+**v0.2.0, 2026-11-19 (the singing coil; v0.1.0 was 2026-09-24), and still early days.**
 
 It's **never been loaded into Resolume on macOS**. `oxbow probe` reads both
 bundles the way a host does and finds `SW Flyback` / `HV01` / source and
@@ -292,11 +293,24 @@ What **isn't** verified yet:
 - **The Lichtenberg figure grows over three seconds and stays lit.** A real one
   forms in nanoseconds and is a dark fossil afterwards. That bit's showbiz.
 - **The singing coil has never heard a real input in a check.** The harness
-  feeds earshot scripted devices and synthetic tones; it's never been in
-  Resolume, never asked for microphone permission, and how Resolume shows its
-  16-entry device menu (with spare "(none)" rows until the mode is first on) is
-  unknown. One voice only: a chord sings as whichever pitch is found. Every bang
-  carries the same energy, so there's no velocity.
+  feeds earshot scripted devices and synthetic tones; it's never sung inside
+  Resolume and never asked for microphone permission. One voice only: a chord
+  sings as whichever pitch is found. Every bang carries the same energy, so
+  there's no velocity.
+- **The singing coil's open questions**, as it ships:
+  - **Picking a device takes two steps.** The 16-entry menu lists only Off,
+    System default and spare "(none)" rows until Pitch Source is first switched
+    on, because the plugin doesn't ask the OS about audio devices before then.
+    Switch it to System default, and your devices appear for the second pick.
+  - **High notes are folded down by octaves**, not dimmed: a note above 1000
+    bangs a second keeps its pitch class at full energy per bang. A real
+    coil would shorten its pulses instead.
+  - **There's no Clarity control.** A frame counts as pitched at earshot's
+    fixed clarity of 0.80; a noisy source may sustain more than it sets.
+  - **The Singing group is at the very bottom of the panel**, after About:
+    the only place four controls could go without renumbering the rest.
+  - **The lamp shows on every machine** while Pitch Source is on, though only
+    the Tesla coil sings.
 - **No racing sparks down the Tesla coil's secondary.** The Van de Graaff's
   corona is charged against the belt (C dV/dt = I − G(V − V_c)), but G is
   derived to first order in space charge and the rough-sphere factor is

@@ -8,6 +8,12 @@ ladders, tesla coils, van de Graaff generators etc." The spec is
 `~/Projects/resolume/specs/SPEC-flyback.md`; the shared brief is
 `~/Projects/resolume/specs/BRIEF.md`.
 
+Public at github.com/stoatworks-labs/flyback and registered with the
+website. Released at **v0.1.0** on 2026-09-24 and **v0.2.0** on 2026-11-19
+(the singing coil, below, and its first Windows build). CI (`ci.yml`) and the
+tag-driven `release.yml` run on GitHub; the repo is public, so Actions cost
+nothing. `deploy.yml` redeploys the browser demo on push to main.
+
 ## The one idea
 
 **Air is an insulator until the field tears it, and where it tears is a
@@ -352,14 +358,14 @@ Assumed, or not yet done:
 - **Never loaded into Resolume.** How the panel presents, whether the clock
   arrives in seconds or milliseconds (voted on, as rosette and millpond do),
   whether FF_TYPE_XPOS/YPOS pairs show as pads, and what the FFT bins are.
-- **Windows never built.** RGBA32F additive blending is standard on DX11-class
-  hardware but untested here.
+- **Windows is built by CI only** (MSVC, `ci.yml` and `release.yml`), and run
+  only in Arena on win-lab's software renderer (the README's Status). RGBA32F
+  additive blending is standard on DX11-class hardware but untested on one.
 - **The GPU-less CI runner** cannot create an accelerated GL context, so
   `ci.yml` runs `hvtest --list`, `hvtest --offline` (the physics and
   registration checks and their negative controls, no GL context) and
   `tools/glslc.sh --require`. The pixel checks, and anything only a real driver
-  catches, run in `tools/verify.sh` on a Mac with a GPU and nowhere else. The
-  repo has no remote, so the workflow has never actually run.
+  catches, run in `tools/verify.sh` on a Mac with a GPU and nowhere else.
 - **The worker thread has never met a host.** The engine's worst step is
   12 ms (globe) on this CPU; overlapped with the host's work that is hidden
   here, but on a slower machine it still eats the frame.
@@ -410,8 +416,10 @@ middle, earshot's own pitch gate) are appended after the About block as ids
 composition stores parameters by index and loads with the mode off.
 
 **earshot is a snapshot**, `git archive 8124191` under `external/earshot`,
-unmodified (`SNAPSHOT`), eidophone's arrangement. verify.sh compares it file
-for file with `~/dev/earshot` when that checkout exists, and requires this
+unmodified (`SNAPSHOT`), eidophone's arrangement. earshot is public at
+github.com/stoatworks-labs/earshot (SNAPSHOT's `Source:` line); verify.sh
+compares the snapshot file for file with the checkout at
+`~/Projects/resolume/earshot` (or `$EARSHOT`) when it exists, and requires this
 file to name the commit. Do not patch it here; change earshot and take a new
 snapshot.
 
@@ -498,9 +506,13 @@ control; that has not been tried.
   images load with the plugin even with the mode off. The trap counts calls,
   not loads, and finds none. A build with `-DFLYBACK_SINGING=OFF` links
   neither.
-- **FLYBACK_SINGING is OFF on Windows** (earshot has never been built by
-  MSVC). The stub declares the same parameters, so a composition loads the
-  same; the lamp says no device can open. hvtest requires it ON.
+- **FLYBACK_SINGING is ON on every platform since v0.2.0.** It was OFF off
+  macOS until then for one reason: earshot had never been built by MSVC. It
+  has since (needle's CI compiles this snapshot, and woofer, rubens, eidophone
+  and marbling ship Windows DLLs with it), and flyback's own CI compiles it
+  cleanly. `-DFLYBACK_SINGING=OFF` still builds a stub that declares the same
+  parameters, so a composition loads the same, and the lamp says no device
+  can open. hvtest requires it ON.
 - **The lamp** is a disc in a dark bezel, top left, drawn last and only while
   the mode is on, on any machine: green Running, red Silent (bit-exact zeros
   for 3 s: no permission, an unpatched input), blinking red Missing, blinking
@@ -588,10 +600,11 @@ oxbow directly with `DYLD_INSERT_LIBRARIES`, never through perl's alarm.
   unknown.
 - **Microphone permission.** A host without it gets bit-exact zeros, which
   the lamp shows as red Silent after 3 s (earshot's rule). Not tried.
-- **Windows**: the stub only (FLYBACK_SINGING OFF), never built here.
+- **Windows**: the mode is built (FLYBACK_SINGING ON since v0.2.0, by CI's MSVC), and has
+  never heard an input there: win-lab, where Arena runs it, has no sound device.
 - **The browser demo** has no singing mode.
 
 ## Conventions
 
 Tabs. British spelling in prose. Comments explain why, and especially what
-goes wrong. Local repo: no remote, no tag, not on the website.
+goes wrong. Public repo, released (v0.1.0, v0.2.0), on the website.
