@@ -39,7 +39,9 @@ body[data-embed] .fb-warning { display: none; }
 .flyback-file__pick { justify-self: start; font-size: 12px; padding: 4px 10px; }
 
 .flyback-file__note {
+  /* .prow's side padding, so it lines up with the rows above and below. */
   margin: 2px 0 8px;
+  padding: 0 14px;
   font-size: 12px;
   color: var(--muted);
   overflow-wrap: anywhere;
