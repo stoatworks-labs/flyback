@@ -13,6 +13,20 @@ Tesla coil, a Van de Graaff generator, a plasma globe and a Lichtenberg figure. 
 FFGL plugins, a source (`SW Flyback`) and an effect that strikes into your clip
 (`SW Flyback Over`), and nobody has to stand behind the cage.
 
+> **Photosensitivity.** The singing coil (new in v0.2.0) strikes at the pitch of whatever it
+> hears, so busy music makes busy strikes, and through `SW Flyback Over` every strike lights the
+> clip. I measured it over the audio of Resolume's eighteen demo clips, counting flashes in the
+> whole frame and in every third of it. At the defaults it stays well under **three flashes a
+> second**, the line broadcast and web (WCAG) guidance draw: the singing source flashed none over
+> the whole frame and at most 0.5 a second in a third of it, and the Over effect added at most
+> half a flash a second to the clip's own. Pushed (Efficiency at 10%, Gate at −30 dBFS, the coil
+> at Scale ×2, and Illumination ×40 for the Over), the busiest demo beats and the browser demo's
+> test tune reached **2.5** (source), and the beats **3.0** (Over), flashes a second in a third of
+> the frame: at the line, not past it, and louder, faster or denser music than the demo clips can
+> go further. Flashing like that can trigger seizures in people with photosensitive epilepsy. The
+> BPS mode, v0.1.0's, stayed at or under one a second at every rate tried. See
+> [Flashing](https://stoatworks-labs.com/software/flyback/guide/#flashing) in the guide.
+
 The [project page](https://stoatworks-labs.com/software/flyback/) has the downloads, the [user guide](https://stoatworks-labs.com/software/flyback/guide/) and the video.
 
 ![A Tesla coil firing: violet streamers branching off the toroid into the air, and one white-hot strike down to the grounded base](docs/hero.png)

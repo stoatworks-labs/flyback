@@ -39,6 +39,14 @@ from Resolume.*
 >
 > This codebase was created with AI assistance, directed and reviewed by a human author.
 
+> **Photosensitivity.** The singing coil, new in v0.2.0, strikes at the pitch of whatever it
+> hears, so busy music makes busy strikes, and in SW Flyback Over every strike lights the clip.
+> At the defaults, over the audio of Resolume's eighteen demo clips, it stayed well under the
+> **three flashes a second** that broadcast and web guidance allow. Pushed, the busiest drum
+> loops reached 2.5 to 3 flashes a second over a third of the picture: at that line, not past
+> it, and other music can go further. Flashing like that can trigger seizures in people with
+> photosensitive epilepsy. The numbers, and how to keep it down, are under [Flashing](#flashing).
+
 ---
 
 ## Installing
@@ -387,7 +395,9 @@ frames.
 
 **Drums.** The flip side is that on a drum loop the coil holds whatever pitch it last heard
 right through the loop, because a loop's tail rarely drops below −60 dBFS between hits. **Raise
-the Gate** until it rests between hits: around −30 dBFS, five of the six demo beats did.
+the Gate** until it rests between hits: around −30 dBFS, five of the six demo beats did. The coil
+then starts and stops with the beat, so read [Flashing](#flashing) before you push Efficiency,
+Scale or Illumination with it.
 
 **What it looks like.** A sung bang is exactly the bang the coil makes at that BPS, so the
 streamers follow the note: a low note gives short, fresh sparks, a high one long streamers that
@@ -595,6 +605,48 @@ It records the GL version and renderer at load, which of the seven shaders faile
 the host clock's unit once it's worked it out.
 
 ---
+
+## Flashing
+
+A strike is a short, bright event, and in **SW Flyback Over** it lights the clip as well
+(**Illumination**). Most of the time a strike is a thin line over a small part of the picture, so
+it doesn't count as a flash the way broadcast and web guidance measure one: a change of brightness
+over a large area, more than three times a second. The singing coil is the part to watch,
+because it fires at the music rather than at a rate you set.
+
+**What was measured.** Each setting was rendered by the offline harness for 7.5 seconds at
+640×360 and 60 frames a second, and every flash counted over the whole frame and over each third
+of it (a 5×5 grid of overlapping windows), against the three-a-second line. The singing coil was
+fed the audio of each of Resolume's eighteen demo clips, and the browser demo's 12-second test
+tune; the Over effect ran on each clip with its own audio and was compared with the bare clip.
+
+| | whole frame, worst second | any third of the frame, worst second |
+| --- | --- | --- |
+| SW Flyback, singing, defaults | 0 | 0.5 |
+| SW Flyback, singing, Gate −30 dBFS | 0 | 0 |
+| SW Flyback Over, singing, defaults | 1 (the clip's own) | 3 (Beat 002's own, with or without Flyback); Flyback adds at most 0.5 |
+| SW Flyback, singing, the demo's test tune, defaults (and at Octave −4) | 0 | 0 |
+| SW Flyback, singing, pushed | 0 | 2.5 (two drum loops, and the test tune) |
+| SW Flyback Over, singing, pushed | 1 | 3 (on Beat 003, which has none of its own) |
+| SW Flyback, BPS (v0.1.0's mode), 5 to 40 BPS | 0 | 0 |
+| SW Flyback Over, BPS, default and 10 BPS | 0 | 1 |
+
+"Pushed" is Efficiency at 10% (its top), the coil at Scale ×2 and, for the Over, Illumination at
+×40 (its top), with the Gate at −30 dBFS on the drum loops so the coil rests between hits. The
+pushed numbers come from music that starts and stops the coil: the six drum loops, and the test
+tune's short, detached notes.
+
+**Keeping it down.** These are the numbers for Resolume's demo clips, not for your music: a
+louder, faster or denser track can go past the line, and a different clip under the Over can too.
+To bring a busy track down:
+
+- Bring **Efficiency** down, and in SW Flyback Over bring **Illumination** down: both dim each
+  strike without changing what it does.
+- Keep the coil small (**Scale**), so a strike covers less of the picture.
+- Or switch **Pitch Source** off: the coil fires at **BPS** again, and BPS stayed at or under one flash
+  a second at every rate tried.
+
+Watch it on a monitor before it goes in front of an audience.
 
 ## What is verified, and what is assumed
 
