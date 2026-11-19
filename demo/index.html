@@ -4,15 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Flyback — browser demo | Stoatworks Labs</title>
-    <meta name="description" content="Try the Flyback FFGL source and effect for Resolume in your browser: Jacob's ladders, Tesla coils, Van de Graaffs, plasma globes and Lichtenberg figures grown by the dielectric breakdown model. The plugin's own light shaders, ported to WebGL2, driven by a JavaScript port of its Laplace-solving engine." />
+    <meta name="description" content="Try the Flyback FFGL source and effect for Resolume in your browser: Jacob's ladders, Tesla coils, Van de Graaffs, plasma globes and Lichtenberg figures grown by the dielectric breakdown model, and a Tesla coil that sings, its interrupter firing at the pitch of the music. The plugin's own light shaders, ported to WebGL2, driven by a JavaScript port of its Laplace-solving engine; the singing coil's pitch is the plugin's own C++ in WebAssembly, fed a tune the page makes or a file of yours, never a microphone." />
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./vendor/kit.css" />
+    <link rel="stylesheet" href="./flyback.css" />
     <link rel="canonical" href="https://flyback-demo.stoatworks-labs.com/" />
     <meta name="project-page" content="https://stoatworks-labs.com/software/flyback/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Stoatworks Labs" />
     <meta property="og:title" content="Flyback — browser demo | Stoatworks Labs" />
-    <meta property="og:description" content="Try the Flyback FFGL source and effect for Resolume in your browser: Jacob's ladders, Tesla coils, Van de Graaffs, plasma globes and Lichtenberg figures grown by the dielectric breakdown model. The plugin's own light shaders, ported to WebGL2, driven by a JavaScript port of its Laplace-solving engine." />
+    <meta property="og:description" content="Try the Flyback FFGL source and effect for Resolume in your browser: Jacob's ladders, Tesla coils, Van de Graaffs, plasma globes and Lichtenberg figures grown by the dielectric breakdown model, and a Tesla coil that sings, its interrupter firing at the pitch of the music. The plugin's own light shaders, ported to WebGL2, driven by a JavaScript port of its Laplace-solving engine; the singing coil's pitch is the plugin's own C++ in WebAssembly, fed a tune the page makes or a file of yours, never a microphone." />
     <meta property="og:url" content="https://flyback-demo.stoatworks-labs.com/" />
     <meta property="og:image" content="https://stoatworks-labs.com/thumbs/flyback.png" />
     <meta property="og:image:width" content="1280" />
@@ -21,6 +22,32 @@
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
+    <section class="fb-warning" id="photosensitivity" aria-labelledby="fb-warning-title">
+      <h2 class="fb-warning__title" id="fb-warning-title">Photosensitivity warning</h2>
+      <p>
+        <strong>This page flashes.</strong> Flyback&rsquo;s sparks are flashes of light. The
+        Tesla coil bangs many times a second (BPS sets how many, 5 to 1000, and the page opens on it
+        at 120), the Van de Graaff sparks a few times a second, the Jacob&rsquo;s ladder&rsquo;s arc
+        breaks and restrikes, and Fire makes a bang at once. In the Over build, Illumination lights
+        the whole clip with each bang, so the clip flashes too. Flashing light can trigger seizures
+        in people with photosensitive epilepsy. If you, or anyone who can see your screen, may be
+        affected, do not use this page.
+      </p>
+      <p>
+        <strong>The singing coil</strong> (Pitch Source, in the Singing group) bangs at the
+        note&rsquo;s rate, 5 to 1000 times a second, and starts and stops with the music: a melody
+        of short notes is a flash with every note, this page&rsquo;s own test tune included. Turned
+        down with Octave, or on a low note, the rate can fall below the frame rate, and then every
+        bang is its own flash. Pitch Source is off until you turn it on.
+      </p>
+      <p>
+        Broadcast and web guidance (Ofcom&rsquo;s, and WCAG&rsquo;s) puts the line at three
+        flashes in any second.
+        <span id="flash-warning">How often this page&rsquo;s machines flash has not been measured yet.</span>
+        <strong>Pause</strong>, under the picture, stops it at once.
+      </p>
+    </section>
+
     <main id="demo">
       <noscript>
         <h1>Flyback</h1>
@@ -34,8 +61,16 @@
           that takes the short way round all end up where the field puts them.
         </p>
         <p>
-          This demo runs the plugin's shaders and a port of its engine in your
-          browser, so it needs JavaScript and WebGL2. The plugin itself, its
+          The Tesla coil can also sing: with Pitch Source on, its interrupter
+          fires once per period of the note it hears, so the crack of every
+          bang is the note. Here the pitch is the plugin's own code, compiled
+          to WebAssembly, listening to a tune this page makes or a sound file
+          you choose. It never uses a microphone.
+        </p>
+        <p>
+          This demo runs the plugin's shaders, a port of its engine and its own
+          pitch code in your browser, so it needs JavaScript, WebGL2 and
+          WebAssembly. The plugin itself, its
           source and its downloads are on
           <a href="https://github.com/stoatworks-labs/flyback">its repository</a>.
         </p>
@@ -53,7 +88,7 @@
       defer
       data-app="Flyback"
       data-repo="https://github.com/stoatworks-labs/flyback"
-      data-note="A browser demo of the plugin's light shaders over a port of its CPU engine. Nothing you load here leaves your machine."
+      data-note="A browser demo of the plugin's light shaders over a port of its CPU engine, with its own pitch code in WebAssembly for the singing coil. It never uses a microphone, and nothing you load here leaves your machine."
     ></script>
   </body>
 </html>

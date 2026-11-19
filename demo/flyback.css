@@ -1,0 +1,48 @@
+/*
+ * Flyback's own additions to the kit's page: the photosensitivity note at the
+ * top, and the singing coil's file row and status line. Everything else is
+ * vendor/kit.css, unedited. (woofer's note, laid out as theirs.)
+ */
+
+.fb-warning {
+  /* #demo is 1400px wide with a 20px gutter: line up with what is inside it. */
+  max-width: 1360px;
+  margin: 24px auto 0;
+  padding: 14px 18px;
+  background: #1f1a0c;
+  border: 1px solid #5a4613;
+  border-left: 4px solid var(--warn);
+  border-radius: 8px;
+  color: #f3e9cf;
+}
+
+@media (max-width: 1400px) {
+  .fb-warning { margin-left: 20px; margin-right: 20px; }
+}
+@media (max-width: 480px) {
+  .fb-warning { margin-left: 16px; margin-right: 16px; padding: 12px 14px; }
+}
+
+.fb-warning__title {
+  font-size: 17px;
+  color: var(--warn);
+  margin: 0 0 4px;
+}
+
+.fb-warning p { margin: 8px 0 0; max-width: 80ch; font-size: 14px; }
+
+/* body has embed set when ?embed=1: the note is the page's, not the picture's. */
+body[data-embed] .fb-warning { display: none; }
+
+/* ---- the singing coil ----------------------------------------------------- */
+
+.flyback-file__pick { justify-self: start; font-size: 12px; padding: 4px 10px; }
+
+.flyback-file__note {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.flyback-sing { overflow-wrap: anywhere; }

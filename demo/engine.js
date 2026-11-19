@@ -20,9 +20,20 @@
  *                with quenched disorder, arcs
  *   Tree.*       Kirchhoff currents, lengths, compaction
  *   Engine.cpp   all five machines, their circuits and clocks, the shutter
- *                window, and the light shared out as I x length
- *   Controls.cpp every 0..1 conversion, Resolve() and Display()
+ *                window, and the light shared out as I x length; and the
+ *                singing coil's interrupter (TeslaMachine's StepSung: a phase
+ *                accumulator in double at Settings::singRate, a rest and
+ *                entering the mode zeroing the phase, Fire's bangs merged on
+ *                top, the BPS anchor kept), also by hand
+ *   Controls.cpp every 0..1 conversion, Resolve() and Display(), with the
+ *                singing controls' (Singing.cpp's GateFromParam and
+ *                OctaveFromParam, and BPS reading "sung")
  *   Presets.h    the five rows, and FlybackPlugin::Effective's override
+ *
+ * What is NOT here: the singing coil's pitch input (Singing.cpp's PitchInput
+ * and earshot under it), which decides the rate the sung interrupter runs at.
+ * That is the plugin's own C++ compiled to WebAssembly (flyback-sing.wasm,
+ * driven from singing.js); this file only receives its rate.
  *
  * What is NOT the same, and why:
  *
@@ -1371,6 +1382,10 @@ class TeslaMachine extends MachineBase {
     this.bangPeriod = -1.0;
     this.lastBang = -kHuge;
     this.pending = [];
+    // The singing interrupter's (Engine.cpp, StepSung).
+    this.singing = false;
+    this.phase = 0.0; // in cycles, 0 <= phase < 1
+    this.sung = [];
   }
 
   minor() { return TeslaMachine.kMinorRatio * this.s.topload; }
@@ -1423,6 +1438,8 @@ class TeslaMachine extends MachineBase {
     this.bangIndex = 0;
     this.lastBang = -kHuge;
     this.pending = [];
+    this.singing = false;
+    this.phase = 0.0;
   }
 
   fire(t) { this.pending.push(t); }
@@ -1435,6 +1452,11 @@ class TeslaMachine extends MachineBase {
 
   step(t0, t1, exposeFrom, out) {
     const s = this.s;
+    if (s.sing) {
+      this.stepSung(t0, t1, exposeFrom, out);
+      return;
+    }
+    this.singing = false;
     if (this.bangPeriod > 0.0 && this.anchor + (this.bangIndex + 1) / s.bps < t0 - 1e-9) this.rebase(t0);
     for (;;) {
       let next = kHuge;
@@ -1454,6 +1476,54 @@ class TeslaMachine extends MachineBase {
       if (clock) this.bangIndex += 1;
       this.bang(t, t > exposeFrom, out);
     }
+  }
+
+  /**
+   * Engine.cpp's StepSung, the singing interrupter: a phase accumulator in
+   * double (a JS number is one), in cycles. The rate (`s.singRate`, which the
+   * page takes from the plugin's own pitch input, compiled to WebAssembly:
+   * singing.js) is held for the step (t0, t1]. Every whole cycle the phase
+   * crosses is a bang, at t0 + (k - phase) / r; only the step's length enters,
+   * never the clock's value. A rest (rate 0) zeroes the phase, and so does
+   * entering the mode, so a note's first bang is a whole period after it
+   * starts. Fire's bangs are merged in time order on top, and the BPS clock's
+   * anchor is kept at t1, where a switch back to BPS would start. The
+   * harness's negative controls (singHooks) are left out: the plugin never
+   * sets them.
+   */
+  stepSung(t0, t1, exposeFrom, out) {
+    const s = this.s;
+    if (!this.singing) {
+      this.singing = true; // entering the mode: the first cycle starts here
+      this.phase = 0.0;
+    }
+    const a = t0, b = t1;
+    this.sung.length = 0;
+    const r = s.singRate > 0.0 && Number.isFinite(s.singRate) ? s.singRate : 0.0;
+    if (r > 0.0 && b > a) {
+      const end = this.phase + r * (b - a);
+      const n = Math.floor(end);
+      for (let k = 1.0; k <= n; k += 1.0) this.sung.push(Math.min(b, a + (k - this.phase) / r));
+      this.phase = end - n;
+    } else if (r <= 0.0) {
+      this.phase = 0.0; // a rest: the next note's first bang is a whole period after it starts
+    }
+
+    // The clock's bangs and Fire's, in time order.
+    let next = 0;
+    for (;;) {
+      const clock = next < this.sung.length ? this.sung[next] : kHuge;
+      let fired = kHuge;
+      if (this.pending.length > 0) fired = Math.min(...this.pending);
+      const t = Math.min(clock, fired);
+      if (t > t1) break;
+      if (fired <= clock) this.pending.splice(this.pending.indexOf(fired), 1);
+      else next += 1;
+      this.bang(t, t > exposeFrom, out);
+    }
+    // The BPS clock, kept where a switch back to it would start.
+    this.anchor = t1;
+    this.bangIndex = 0;
   }
 
   bang(t, exposed, out) {
@@ -2186,8 +2256,23 @@ export const PT = {};
   'EFFICIENCY', 'GLOW', 'GAS', 'SHUTTER', 'PERSISTENCE', 'APPARATUS', 'BACK_R', 'BACK_G', 'BACK_B',
   'DETECT', 'THRESHOLD', 'ILLUMINATION', 'MIX',
   'POS_X', 'POS_Y', 'SCALE', 'ROTATION',
+  // The About block's five ids come here in the plugin; the page has no About
+  // block, so these indices are the page's own and not the plugin's 54-57.
+  'PITCH_SOURCE', 'RESCAN', 'OCTAVE', 'GATE',
 ].forEach((name, i) => { PT[name] = i; });
 export const PT_COUNT = Object.keys(PT).length;
+
+// Singing.h / Singing.cpp: the singing controls' conversions. The pitch input
+// itself is not ported: it is the plugin's C++, in WebAssembly (singing.js).
+export const kOctaveLow = -4;
+export const kOctaveHigh = 2;
+export const kOctaveElements = kOctaveHigh - kOctaveLow + 1;
+export const kOctaveDefault = -kOctaveLow; // the index of 0 octaves
+export const kGateLowDb = -100.0;
+export const kGateHighDb = -20.0;
+export const gateFromParam = (v) => kGateLowDb + (kGateHighDb - kGateLowDb) * clamp(v, 0.0, 1.0);
+export const paramFromGate = (db) => f32(clamp((db - kGateLowDb) / (kGateHighDb - kGateLowDb), 0.0, 1.0));
+export const octaveFromParam = (v) => kOctaveLow + clamp(lround(v), 0, kOctaveElements - 1);
 
 export function nominalFor(machine) {
   switch (machine) {
@@ -2262,6 +2347,9 @@ export function resolve(p, level, aspect) {
   s.target = option(p[PT.TARGET], 3);
   s.targetX = clamp(p[PT.TARGET_X], 0.0, 1.0);
   s.targetY = clamp(p[PT.TARGET_Y], 0.0, 1.0);
+  // Set per frame from the pitch input, after Resolve (Flyback.cpp).
+  s.sing = false;
+  s.singRate = 0.0;
 
   s.belt = beltFromParam(p[PT.BELT]);
   s.sphere = sphereFromParam(p[PT.SPHERE]);
@@ -2311,6 +2399,9 @@ export function resolve(p, level, aspect) {
     detect: option(p[PT.DETECT], 3),
     threshold: clamp(p[PT.THRESHOLD], 0.0, 1.0),
     audioFires: clamp(p[PT.AUDIO_FIRES], 0.0, 1.0),
+    singing: p[PT.PITCH_SOURCE] > 0.0,
+    octaves: octaveFromParam(p[PT.OCTAVE]),
+    gateDb: gateFromParam(p[PT.GATE]),
   };
 }
 
@@ -2333,7 +2424,9 @@ export function display(index, p) {
     case PT.ROD_LENGTH: return `${s.rodLength.toFixed(2)} m`;
     case PT.RISE: return `${s.rise.toFixed(2)} m/s`;
     case PT.WIND: return `${sign(s.wind, 2)} m/s`;
-    case PT.BPS: return s.bps <= 0.0 ? 'off' : `${s.bps.toFixed(0)} BPS`;
+    case PT.BPS:
+      if (r.singing && s.machine === Machine.Tesla) return 'sung';
+      return s.bps <= 0.0 ? 'off' : `${s.bps.toFixed(0)} BPS`;
     case PT.TOPLOAD: return `${s.topload.toFixed(2)} m`;
     case PT.BELT: return `${(s.belt * 1e6).toFixed(1)} uA`;
     case PT.SPHERE: return `${s.sphere.toFixed(2)} m`;
@@ -2347,6 +2440,7 @@ export function display(index, p) {
     case PT.ILLUMINATION: return `x${r.look.illumination.toFixed(1)}`;
     case PT.SCALE: return `x${s.scale.toFixed(2)}`;
     case PT.ROTATION: return `${deg(s.rotation).toFixed(0)} deg`;
+    case PT.GATE: return `${r.gateDb.toFixed(0)} dBFS`;
     default: return '';
   }
 }

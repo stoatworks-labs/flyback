@@ -1,4 +1,7 @@
-# Not part of the page. check_shaders.py is a repo-side check that the demo's
-# shader copies still match the plugin's; wrangler would otherwise upload it and
-# serve it, which is neither useful nor anybody's business.
+# Not part of the page. tools/ holds check_shaders.py (the repo-side check that
+# the demo's copies are still the plugin's) and build-wasm.sh; wasm/ holds the
+# glue that is compiled INTO flyback-sing.wasm and the build's input manifest.
+# wrangler would otherwise upload them and serve them, which is neither useful
+# nor anybody's business.
 tools/
+wasm/

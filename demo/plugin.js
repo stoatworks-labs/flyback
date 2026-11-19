@@ -47,12 +47,23 @@
  * event type (millpond's and readout's answer). The plugin fires on the rising
  * edge; so does this.
  *
- * **Nothing audio.** `Audio` is an FFT buffer Resolume fills; `Audio Fires` and
- * `Audio Drive` read it. A browser has no Resolume FFT, and asking for a
- * microphone to demonstrate a video source is not a trade worth making, so all
- * three are left off the panel rather than shown dead. The removal is exact:
- * with no spectrum the plugin's analyser reports a level of 0 and never fires,
- * so the drive is x1 and nothing fires by itself -- here as there.
+ * **No Resolume FFT.** `Audio` is an FFT buffer Resolume fills; `Audio Fires`
+ * and `Audio Drive` read it. A browser has no Resolume FFT, so all three are
+ * left off the panel rather than shown dead. The removal is exact: with no
+ * spectrum the plugin's analyser reports a level of 0 and never fires, so the
+ * drive is x1 and nothing fires by itself -- here as there.
+ *
+ * **The singing coil is a third half, and it is the plugin's.** With Pitch
+ * Source on, the Tesla coil's interrupter fires at the pitch of the music
+ * instead of at BPS. The pitch is the plugin's own C++ (source/Singing.cpp's
+ * PitchInput and earshot's snapshot under it) compiled to WebAssembly,
+ * `flyback-sing.wasm`, driven from `singing.js`; it hears the page's test tune
+ * (`tune.js`) or a file the visitor picks, fed through earshot's feed() as the
+ * plugin's harness feeds it -- never a microphone, never a device. The
+ * interrupter that turns its rate into bangs is Engine.cpp's StepSung, ported
+ * by hand into engine.js with the rest of the engine. Rescan Inputs is left
+ * off: there are no devices to rescan. With Pitch Source Off, the default,
+ * the module is never fetched and nothing here runs.
  *
  * **The About block is not a parameter here.** A text line and four link
  * buttons exist so a host has somewhere to put them; a page has links of its
@@ -68,6 +79,8 @@
 import { mountDemo } from './vendor/demo.js';
 import { Program, PassBuffer, GLError, bindTexture } from './vendor/gl.js';
 import * as E from './engine.js';
+import { Singer, LampPainter, PITCH_SOURCES, SOURCE_TUNE, SOURCE_FILE, LAMP_WORDS, decodeFile } from './singing.js';
+import { TUNE_SECONDS } from './tune.js';
 
 //---------------------------------------------------------------------------
 // Shaders — verbatim from source/render/Shaders.cpp. Do not edit here.
@@ -649,12 +662,18 @@ class FlybackRenderer {
 
     this.variant = null;
     this.frame = new E.Frame();
-    this.stats = { engineMs: 0, segments: 0, events: 0, lattice: [0, 0], machine: 1 };
+    this.stats = { engineMs: 0, segments: 0, events: 0, lattice: [0, 0], machine: 1, note: null };
+    // The singing coil: the plugin's pitch input (WebAssembly, fetched the
+    // first time Pitch Source is switched on) and its lamp (Lamp.cpp's
+    // shader, compiled on first use).
+    this.singer = new Singer();
+    this.lamp = new LampPainter(gl, quad, QUAD_VERTEX);
     this.reset();
   }
 
   /** A fresh plugin instance: what switching bundle means in a host. */
   reset() {
+    this.singer.reset();
     this.engine = new E.Engine();
     this.frame = new E.Frame();
     this.lastNow = -1;
@@ -904,6 +923,22 @@ class FlybackRenderer {
     if (jumped || period <= 0.0) period = 1.0 / 60.0;
     period = Math.min(0.25, Math.max(1.0 / 240.0, period));
 
+    // Singing: the pitch input, applied and read before the engine's step, as
+    // ProcessOpenGL does, with the harness's feed before it (singing.js). With
+    // Pitch Source Off (the default) this returns at once, touches nothing and
+    // sets nothing, and the engine runs on the BPS clock exactly as before.
+    const note = this.singer.frame({
+      source: Math.round(params.get('pitchSource') ?? 0),
+      time,
+      still,
+      octaves: r.octaves,
+      gateDb: r.gateDb,
+    });
+    if (note.active) {
+      r.engine.sing = true;
+      r.engine.singRate = note.rate;
+    }
+
     if (over && !still) {
       const mw = 160;
       const mh = Math.max(16, E.lround(mw / aspect));
@@ -935,7 +970,11 @@ class FlybackRenderer {
     }
 
     this.draw(this.frame, r.look, width, height, over ? input.texture : null);
+    // The singing coil's status, drawn last, over everything, and only while
+    // the mode is on: with it off not one more GL call is made.
+    if (note.active) this.lamp.draw(note.lamp, note.blinkOn, width, height);
 
+    this.stats.note = note;
     this.stats.engineMs = still ? this.stats.engineMs : this.engine.lastMillis;
     this.stats.segments = this.frame.segmentCount;
     this.stats.events = this.frame.events;
@@ -964,6 +1003,9 @@ const IDS = {
   apparatus: 'APPARATUS', backR: 'BACK_R', backG: 'BACK_G', backB: 'BACK_B',
   detect: 'DETECT', threshold: 'THRESHOLD', illumination: 'ILLUMINATION', mix: 'MIX',
   posX: 'POS_X', posY: 'POS_Y', scale: 'SCALE', rotation: 'ROTATION',
+  // Rescan Inputs is absent: no device exists here to rescan. Pitch Source's
+  // value is the page's menu index; Resolve reads only whether it is above 0.
+  pitchSource: 'PITCH_SOURCE', octave: 'OCTAVE', gate: 'GATE',
 };
 
 /** The raw params as the plugin's float array, then Effective() over them. */
@@ -1059,6 +1101,14 @@ PARAMS.push(
   std('posY', 'Position Y', 0.5, 'Layout', PAD),
   std('scale', 'Scale', 0.5, 'Layout', 'x0.25 to x4 on the machine’s own framing.'),
   std('rotation', 'Rotation', 0.5, 'Layout'),
+
+  // The singing coil, after the rest as in the plugin (after About there).
+  opt('pitchSource', 'Pitch Source', PITCH_SOURCES, 0, 'Singing',
+    'The singing Tesla coil: while this is on, the interrupter fires at the pitch of the music instead of at BPS, and BPS reads “sung”. In the plugin the menu is Off (BPS), System default and the capture devices earshot finds. A browser page has no device it may open, so here it is Off, the page’s test tune, or an audio file of yours (choose one below), fed to the plugin’s own pitch input, compiled to WebAssembly, through earshot’s feed(). Never a microphone. Rescan Inputs is not here: there is nothing to rescan.'),
+  opt('octave', 'Octave', ['-4', '-3', '-2', '-1', '0', '+1', '+2'], E.kOctaveDefault, 'Singing',
+    'The rate is the note times 2^Octave, folded by whole octaves into the coil’s 5 to 1000 bangs a second, so a high note keeps its pitch class. Turned down, the coil bangs slower than the note: at −4 a 220 Hz note is 13.75 bangs a second, slow enough that every bang is its own flash.'),
+  std('gate', 'Gate', E.paramFromGate(-60.0), 'Singing',
+    '−100 to −20 dBFS, a sine’s level; −60, earshot’s own pitch gate, in the middle. A pitched frame at or above it sets the note, unpitched sound above it keeps the note going, and anything below it is a rest that forgets the note. Raise it for drums, so the coil rests between hits.'),
 );
 
 let renderer = null;
@@ -1068,12 +1118,12 @@ const mounted = mountDemo({
   pluginId: 'HV01 · HV02',
   kind: ['source', 'effect'],
   tagline:
-    'High-voltage discharges — a Jacob’s ladder, a Tesla coil, a Van de Graaff, a plasma globe and a Lichtenberg figure — grown by the dielectric breakdown model. Nothing is drawn as a shape of lightning: the potential in the air is solved as a Laplace problem, the channel grows toward where the field is strongest, and five small circuits decide when the air breaks and how much energy it carries. The light is the plugin’s own shaders; the physics is a full JavaScript port of its engine.',
+    'High-voltage discharges — a Jacob’s ladder, a Tesla coil, a Van de Graaff, a plasma globe and a Lichtenberg figure — grown by the dielectric breakdown model. Nothing is drawn as a shape of lightning: the potential in the air is solved as a Laplace problem, the channel grows toward where the field is strongest, and five small circuits decide when the air breaks and how much energy it carries. And the Tesla coil sings: with Pitch Source on, its interrupter fires at the pitch of the music, so every bang is the note. The light is the plugin’s own shaders; the physics is a full JavaScript port of its engine.',
   repo: 'https://github.com/stoatworks-labs/flyback',
   page: 'https://stoatworks-labs.com/software/flyback/',
 
   blurb:
-    'It is Flyback’s own GLSL, ported from the repository to WebGL2, driven by a JavaScript port of the plugin’s CPU engine — the Laplace solve, the breakdown model and all five machines — which nothing checks but a reader. The source build reads no video; the Over build strikes into a generated clip.',
+    'It is Flyback’s own GLSL, ported from the repository to WebGL2, driven by a JavaScript port of the plugin’s CPU engine — the Laplace solve, the breakdown model and all five machines — which nothing checks but a reader. The singing coil’s pitch is the plugin’s own C++ in WebAssembly, fed a tune the page makes or a file of yours, never a microphone. The source build reads no video; the Over build strikes into a generated clip.',
 
   showBackdrop: false,
   needFloat: true,
@@ -1097,7 +1147,11 @@ const mounted = mountDemo({
   differences: [
     'The engine is a hand port to JavaScript, and nothing checks it but a reader. It is the whole engine — the PCG-and-multigrid Laplace solve, the breakdown model with its quenched disorder, Kirchhoff, all five machines and their circuits, every control’s conversion, the presets — at the plugin’s own lattice sizes. It is not bit-exact: the plugin does its lattice arithmetic in 32-bit floats and this rounds only when a value is stored, so a given seed grows a discharge of the same model but not the same one.',
     'The engine runs on this page’s main thread, in the frame it is for. The plugin runs it on a worker thread one frame late. On a slow machine the page drops frames rather than the circuit changing, and a frame longer than a tenth of a second is clamped by the page’s clock, so time runs slow instead of jumping. The line under the picture says what the engine cost. Detail is the control that sets that cost.',
-    'Nothing audio. The plugin declares an Audio FFT buffer that Resolume fills, and Audio Fires and Audio Drive over it. A browser has no Resolume FFT, so all three are absent. With no spectrum the plugin’s analyser reports a level of 0 and never fires, so leaving them out changes nothing the page draws.',
+    'No Resolume FFT. The plugin declares an Audio FFT buffer that Resolume fills, and Audio Fires and Audio Drive over it. A browser has no Resolume FFT, so all three are absent. With no spectrum the plugin’s analyser reports a level of 0 and never fires, so leaving them out changes nothing the page draws.',
+    `The singing coil’s pitch is the plugin’s own C++, not a port. flyback-sing.wasm is source/Singing.cpp — the pitch input: its law (a pitched frame sets the note, unpitched sound above the Gate keeps it, below the Gate is a rest that forgets it), the fold of note × 2^Octave into 5 to 1000 bangs a second, the lamp’s state — with earshot’s snapshot under it (8124191, unpatched: its MPM pitch and its capture states), compiled unmodified by emscripten (demo/tools/build-wasm.sh); the repository’s verify script fails when one of its inputs has changed since it was built. The interrupter its rate drives is NOT compiled: it is the plugin’s phase accumulator (Engine.cpp’s StepSung — a rest and switching the mode on zero the phase, Fire still fires on top, the BPS clock is kept for a switch back), ported by hand into the JavaScript engine with the rest of it, and nothing checks it but a reader. Fed the page’s tune once at 60 frames a second, this module and the plugin’s own pitch input built for the Mac (the objects its harness, hvtest, links) agree on every frame’s pitched, sounding and lamp state; the held pitch differs by at most 0.002 cents, because WebAssembly has no fused multiply-add and its maths library is not Apple’s. hvtest --demo-music’s summary of the tune (pitched on 76.8% of frames, sounding on 77.3% in runs of 63.2 frames, a median of 329.63 bangs a second) and its bang count, 3615 from the plugin’s C++ engine, are what this page’s module and JavaScript interrupter give too.`,
+    `No microphone and no audio device: the page never asks for one, never lists one and makes no sound. earshot is compiled with no capture backend at all (EARSHOT_CAPTURE=OFF: its NoCapture.cpp, and miniaudio is not compiled), and the pitch input runs under FLYBACK_NO_DEVICES=1, its harness’s switch, so it never lists or selects a device; the line under the picture shows its own count of both, which stays at 0. So Pitch Source here is Off, the test tune or your file, where the plugin offers System default and the capture devices, and Rescan Inputs is absent. The audio reaches the pitch input as the plugin’s harness hands it over, through earshot’s feed(), the path a device’s samples take inside earshot: before each frame, every sample up to the page’s clock, at 48 kHz in stereo, looped. A paused page feeds nothing; Restart, a new file, another Pitch Source or the Plugin switch starts the audio again from its beginning as a new stream, which forgets the note, as another device would.`,
+    `The test tune is made by this page, not recorded: ${TUNE_SECONDS.toFixed(2)} s of plain sine tones at −12 dBFS, synthesised sample by sample in tune.js — an A minor arpeggio, a rest, a glide from G3 to G4, a falling line of short detached notes, then A2 (110 bangs a second, short fresh streamers), A5 (880, long ones) and E6, which at 1318.5 Hz is above the coil’s 1000 and folds down an octave. It is nobody’s music. Your own file is decoded by this browser (Web Audio’s decodeAudioData in an OfflineAudioContext, which renders to memory, not to a speaker, resampled to 48 kHz; mono to both channels), never uploaded, and fed the same way. Nothing is played aloud.`,
+    'The singing coil’s rate is held for each frame’s step, as in the plugin, so a glide is a staircase at the frame rate; here the frame rate is your display’s (60 or 120 a second), not Resolume’s, and earshot analyses whatever arrived since the last frame, so the pitch it reports can differ slightly at another refresh rate. The lamp (top left, only while Pitch Source is on) is the plugin’s own shader, Lamp.cpp’s, held to the C++ character for character like the others; its colours and placement are ported by hand. With your file chosen in the menu but none loaded, nothing arrives and the lamp blinks amber, as the plugin’s does before a device opens.',
     'Fire is FF_TYPE_EVENT in the plugin. The kit has no event type, so it is a toggle here that the page releases on the frame it acts, which is why it blinks. Target, Finger and Position X/Y are XPOS/YPOS pairs a host may draw as a pad; here they are plain sliders. The About block is not on the panel.',
     'WebGL2 has no CLAMP_TO_BORDER. The glow pyramid’s levels are read bilinearly with a zero border in the plugin, so light blurred past the frame’s edge fades out; here the edge texel is repeated instead, so a discharge touching the frame’s edge can leave a sliver more halo there. The plugin’s --light check holds its light to 4e-5; this page makes no such claim.',
     'Over: the clip’s ground mask is read back with a synchronous readPixels and used a frame late. The plugin reads it through a two-buffer ring, also a frame late, without the stall. The canvas composites premultiplied, and the plugin writes straight colour with the clip’s alpha, so over the transparency clip what shows through is the page’s compositing, not Resolume’s.',
@@ -1142,6 +1196,55 @@ plugin?.addEventListener('change', syncClipControls);
 syncClipControls();
 
 //---------------------------------------------------------------------------
+// The singing coil's audio file, under Pitch Source in the Singing group. The
+// kit's panel has no file control, so it is added here. The browser decodes
+// the file in this page (singing.js, decodeFile); it is never uploaded and
+// never played.
+//---------------------------------------------------------------------------
+const singingGroup = [...document.querySelectorAll('.pgroup')]
+  .find((section) => section.querySelector('.pgroup__name')?.textContent === 'Singing');
+let singNote = null;
+if (singingGroup && live) {
+  const row = document.createElement('div');
+  row.className = 'prow flyback-file';
+  const label = document.createElement('label');
+  label.className = 'prow__name';
+  label.textContent = 'Audio File';
+  const pick = document.createElement('label');
+  pick.className = 'btn flyback-file__pick';
+  pick.textContent = 'Choose…';
+  pick.title = 'A sound file on this machine for the coil to sing. The browser decodes it here and the page feeds it to the plugin’s pitch input through earshot’s feed(), looped. It is not uploaded and not played aloud.';
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'audio/*';
+  input.hidden = true;
+  input.id = 'flyback-audio-file';
+  pick.htmlFor = input.id;
+  row.append(label, pick, input);
+  singNote = document.createElement('p');
+  singNote.className = 'flyback-file__note';
+  singNote.id = 'flyback-audio-note';
+  singNote.textContent = `The test tune is ${TUNE_SECONDS.toFixed(2)} s of sine tones this page synthesises (tune.js), looped. No file chosen.`;
+  const sourceRow = singingGroup.querySelector('#p-pitchSource')?.closest('.prow');
+  (sourceRow ?? singingGroup.querySelector('.pgroup__name')).after(row, singNote);
+
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    singNote.textContent = `Decoding ${file.name}…`;
+    try {
+      const decoded = await decodeFile(file);
+      renderer?.singer.setFile(decoded);
+      live.set('pitchSource', SOURCE_FILE);
+      singNote.textContent = `${decoded.name}: ${decoded.seconds.toFixed(1)} s, ${decoded.sourceChannels === 1 ? 'mono, on both channels' : `${decoded.sourceChannels} channels, the first two`}, at 48 kHz, looped. It stays in this page.`;
+    } catch (error) {
+      singNote.textContent = `That file could not be decoded: ${error?.message ?? error}`;
+    }
+  });
+}
+
+//---------------------------------------------------------------------------
 // What the engine cost, under the picture: a slow frame should read as a slow
 // CPU, not as a broken page.
 //---------------------------------------------------------------------------
@@ -1152,11 +1255,35 @@ if (stage && mounted) {
   line.setAttribute('aria-live', 'off');
   stage.append(line);
   const names = ["Jacob's Ladder", 'Tesla Coil', 'Van de Graaff', 'Plasma Globe', 'Lichtenberg'];
+  // The singing coil's own line, only while Pitch Source is on.
+  const singLine = document.createElement('p');
+  singLine.className = 'stage__status flyback-sing';
+  singLine.setAttribute('aria-live', 'off');
+  singLine.hidden = true;
+  stage.append(singLine);
+  const singingText = (s) => {
+    const singer = renderer.singer;
+    const n = s.note;
+    const source = Math.round(live?.get('pitchSource') ?? 0);
+    if (singer.error) return `Singing: the pitch module could not load (${singer.error.message ?? singer.error}), so the coil is silent and the lamp blinks red.`;
+    if (!singer.module) return 'Singing: fetching the pitch module (flyback-sing.wasm)… the lamp blinks amber until it is ready.';
+    const what = source === SOURCE_TUNE ? 'the test tune' : singer.file ? singer.file.name : 'no file yet (choose one in the Singing group)';
+    const c = singer.counters();
+    const heard = n.sounding
+      ? `${n.voiced ? 'pitched' : 'unpitched, the note sustained'}: holding ${n.hz.toFixed(1)} Hz → ${n.rate.toFixed(1)} bangs a second`
+      : n.hz > 0 ? `holding ${n.hz.toFixed(1)} Hz, under the Gate` : 'a rest: no note held, the coil silent';
+    const tesla = s.machine === E.Machine.Tesla ? '' : ' (only the Tesla coil sings: this machine ignores it)';
+    return `Singing${tesla}: ${what}, ${singer.fedSeconds().toFixed(2)} s fed through earshot’s feed() · ${heard} · this frame ${n.levelDb > -199 ? `${n.levelDb.toFixed(1)} dBFS` : 'no analysis'} · lamp ${LAMP_WORDS[n.lamp] ?? n.lamp}`
+      + (c ? ` · Singing.cpp’s own counts: ${c.engines} pitch engine${c.engines === 1 ? '' : 's'} made, ${c.lists} device listings, ${c.selects} device selects, ${c.feeds} feedBegin${c.feeds === 1 ? '' : 's'}` : '');
+  };
   const tick = () => {
     if (renderer) {
       const s = renderer.stats;
       line.textContent = `${names[s.machine] ?? ''} · lattice ${s.lattice[0]} × ${s.lattice[1]} · engine ${s.engineMs.toFixed(1)} ms on this page’s thread · ${s.segments} segments · ${s.events} discharge${s.events === 1 ? '' : 's'} lit this frame`;
       line.dataset.frames = String(s.frames ?? 0);
+      const on = s.note?.active === true;
+      singLine.hidden = !on;
+      if (on) singLine.textContent = singingText(s);
     }
   };
   setInterval(tick, 500);
