@@ -40,15 +40,15 @@ rather than captured from Resolume.</sub>
 
 ## Download
 
-**[v0.1.0](https://github.com/stoatworks-labs/flyback/releases/tag/v0.1.0)** — prebuilt for macOS and Windows. Pick your platform:
+**[v0.2.0](https://github.com/stoatworks-labs/flyback/releases/tag/v0.2.0)** — prebuilt for macOS and Windows. Pick your platform:
 
 <details>
 <summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
 
 | Build | Download | Size |
 | --- | --- | --- |
-| Universal (Apple Silicon + Intel) · .dmg disk image | [`flyback-0.1.0-macos-universal.dmg`](https://github.com/stoatworks-labs/flyback/releases/download/v0.1.0/flyback-0.1.0-macos-universal.dmg) | 712 KB |
-| Universal (Apple Silicon + Intel) · .zip archive | [`flyback-macos-universal.zip`](https://github.com/stoatworks-labs/flyback/releases/latest/download/flyback-macos-universal.zip) | 641 KB |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`flyback-0.2.0-macos-universal.dmg`](https://github.com/stoatworks-labs/flyback/releases/download/v0.2.0/flyback-0.2.0-macos-universal.dmg) | 1.4 MB |
+| Universal (Apple Silicon + Intel) · .zip archive | [`flyback-macos-universal.zip`](https://github.com/stoatworks-labs/flyback/releases/latest/download/flyback-macos-universal.zip) | 1.3 MB |
 
 </details>
 
@@ -57,8 +57,8 @@ rather than captured from Resolume.</sub>
 
 | Build | Download | Size |
 | --- | --- | --- |
-| x64 · .exe installer | [`flyback-0.1.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/flyback/releases/download/v0.1.0/flyback-0.1.0-windows-x86_64-setup.exe) | 286 KB |
-| x64 · .zip archive | [`flyback-windows-x86_64.zip`](https://github.com/stoatworks-labs/flyback/releases/latest/download/flyback-windows-x86_64.zip) | 347 KB |
+| x64 · .exe installer | [`flyback-0.2.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/flyback/releases/download/v0.2.0/flyback-0.2.0-windows-x86_64-setup.exe) | 413 KB |
+| x64 · .zip archive | [`flyback-windows-x86_64.zip`](https://github.com/stoatworks-labs/flyback/releases/latest/download/flyback-windows-x86_64.zip) | 590 KB |
 
 </details>
 
