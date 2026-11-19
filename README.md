@@ -332,14 +332,20 @@ What **isn't** verified yet:
 
 ## Browser demo
 
-**<https://flyback-demo.stoatworks-labs.com/>**: both plugins and all five
-machines, in a browser. It isn't the plugin, though. The light path is the
-plugin's own GLSL, copied unedited (`demo/tools/check_shaders.py`, run by
+**<https://flyback-demo.stoatworks-labs.com/>**: both plugins, all five machines
+and the singing coil, in a browser. It isn't the plugin, though. The light path
+is the plugin's own GLSL, copied unedited (`demo/tools/check_shaders.py`, run by
 `tools/verify.sh`, fails on any drift). The CPU engine (the Laplace solve, the
-breakdown model, the machines' circuits and the controls) is a hand port to
-JavaScript in `demo/engine.js` that **nothing checks but a reader**. It runs at
-the plugin's own lattice sizes on the page's main thread, isn't bit-exact and
-has no audio. The page lists every difference.
+breakdown model, the machines' circuits, the sung interrupter and the controls)
+is a hand port to JavaScript in `demo/engine.js` that **nothing checks but a
+reader**. It runs at the plugin's own lattice sizes on the page's main thread
+and isn't bit-exact. The singing coil's pitch input is not a port: it is the
+plugin's own `source/Singing.cpp` and earshot, compiled unmodified to
+WebAssembly (`demo/tools/build-wasm.sh`; the same check hashes every input and
+fails when one changes without a rebuild). It hears a tune the page synthesises or an audio
+file you choose, never a microphone, and the page makes no sound. There is no
+Resolume FFT, so Audio, Audio Fires and Audio Drive are absent. The page lists
+every difference and opens with a photosensitivity warning.
 
 ## Build
 

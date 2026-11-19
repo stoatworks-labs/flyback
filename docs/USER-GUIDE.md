@@ -675,7 +675,11 @@ a sweep fails if any control does nothing.
   harness, never a real input in a host, on macOS or Windows. Picking a device takes two steps,
   high notes are folded rather than dimmed, there's no Clarity control, the Singing group sits
   after About, and the lamp shows on every machine though only the Tesla coil sings.
-- **Not timed in a host, or on Windows.** No OpenFX version. There's a [browser demo](https://flyback-demo.stoatworks-labs.com), but it runs a JavaScript port of the engine that only a reader checks, so treat it as a preview rather than the plugin.
+- **Not timed in a host, or on Windows.** No OpenFX version. There's a [browser
+  demo](https://flyback-demo.stoatworks-labs.com) with the singing coil: its pitch input is the
+  plugin's own code compiled to WebAssembly, fed a tune the page makes or a file of yours, never a
+  microphone. But the engine is a JavaScript port that only a reader checks, so treat it as a
+  preview rather than the plugin.
 
 ---
 

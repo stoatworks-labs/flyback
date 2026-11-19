@@ -114,6 +114,13 @@ the light's accounting.
   `Presets.h`. Nothing checks it: change the C++, change the port.
 - `demo/vendor/` is the shared kit: never edit it, re-vendor with
   `stoatworks-backend/resolume-demo/sync.sh`.
+- `demo/flyback-sing.{js,wasm}` is `source/Singing.cpp` + earshot built by
+  `demo/tools/build-wasm.sh` (em++ on PATH; commit both outputs, mode 644).
+  `demo/wasm/inputs.sha256` hashes its inputs and `check_shaders.py` fails when
+  one changes: touch Singing.*/Diag.* or earshot -> rerun build-wasm.sh.
+  `demo/singing.js` feeds it (the tune in `tune.js` or a file, never a device)
+  and holds Lamp.cpp's shader verbatim; the sung interrupter in engine.js is a
+  hand port.
 
 ## Diagnostics
 

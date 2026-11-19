@@ -392,14 +392,38 @@ Assumed, or not yet done:
   `hvtest --list`, and each preset's frame looked like hvtest's. Change the
   engine, change the port.
 - **Differences, all said on the page:** the engine runs synchronously on the
-  page's thread (not a worker a frame late); no audio (the Audio buffer, Audio
-  Fires and Audio Drive are absent -- with no spectrum the plugin does the
-  same); Fire is a toggle the page releases; XPOS/YPOS are sliders; no About
+  page's thread (not a worker a frame late); no Resolume FFT (the Audio
+  buffer, Audio Fires and Audio Drive are absent -- with no spectrum the
+  plugin does the same); Pitch Source is Off / the page's test tune / the
+  visitor's file, and Rescan Inputs is absent; Fire is a toggle the page releases; XPOS/YPOS are sliders; no About
   block; WebGL2 has no CLAMP_TO_BORDER, so the glow levels clamp to edge; Over's
   mask is a synchronous readPixels, still a frame late; it needs float
   render, blend and linear filtering, and refuses without them.
 - The Over build strikes into the kit's generated clips (Lights on black
   first). The Plugin switch is a new instance: engine and history restart.
+- **The singing coil (2026-11-19): the pitch input is compiled, the
+  interrupter is ported.** `demo/flyback-sing.wasm` is `source/Singing.cpp` +
+  `Diag.cpp` with earshot's snapshot (`EARSHOT_CAPTURE=OFF`: NoCapture.cpp, no
+  miniaudio), built unmodified by `demo/tools/build-wasm.sh` (emscripten
+  6.0.5, `-DFLYBACK_SINGING=1`, reproducible) behind `demo/wasm/glue.cpp`,
+  which runs `FLYBACK_NO_DEVICES=1` and feeds through `PitchInput::Feed` as
+  hvtest does. `demo/wasm/inputs.sha256` hashes every input (from the
+  compiler's dependency files) and both outputs; `check_shaders.py` fails on a
+  changed hash, an earshot source not compiled, an executable output, a served
+  file naming a capture API, or drift in Lamp.cpp's shader (copied into
+  `demo/singing.js`). The sung interrupter (Engine.cpp's StepSung) is a hand
+  port in `engine.js` that only a reader checks. The page feeds a 12.25 s
+  sine-tone tune it synthesises (`demo/tune.js`) or a visitor's file decoded
+  by an OfflineAudioContext, against the page clock, looped; no audio out, no
+  microphone, no device. Fed the tune once at 60 fps, the wasm and hvtest's
+  own objects agree on every frame's voiced, sounding and lamp state (736
+  frames), with held rates within 1.1e-6 relative (0.002 cents: no FMA in
+  wasm, another libm); the page's path (wasm + JS interrupter) reproduces
+  `hvtest --demo-music`'s summary (76.8 / 77.3 / runs of 63.2 / median 329.63)
+  and its 3615 bangs. With Pitch Source off, `engine.js` gives frames
+  bit-identical to the port before singing (2400 frames: five machines, every
+  preset). The page's photosensitivity note carries the plugin's measured
+  flash rates (README), not the page's own.
 
 ## The singing coil (2026-11-16, after v0.1.0)
 
@@ -602,7 +626,11 @@ oxbow directly with `DYLD_INSERT_LIBRARIES`, never through perl's alarm.
   the lamp shows as red Silent after 3 s (earshot's rule). Not tried.
 - **Windows**: the mode is built (FLYBACK_SINGING ON since v0.2.0, by CI's MSVC), and has
   never heard an input there: win-lab, where Arena runs it, has no sound device.
-- **The browser demo** has no singing mode.
+- **The browser demo's singing coil**: its pitch input is the plugin's C++ in
+  WebAssembly, compared with hvtest only on the page's test tune at 60 frames
+  a second (never at 120 Hz or a variable frame rate, never on a visitor's
+  file); its interrupter is a hand port that only a reader checks. Tried only
+  in Chromium. The page's own flash rate is not measured (the plugin's is).
 
 ## Conventions
 
