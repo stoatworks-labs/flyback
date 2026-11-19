@@ -10,6 +10,22 @@ pushed out by `scripts/sync-attributions.py`. Edit it there, not here.
 
 Someone else solved this first, and this project would not exist in its current form without their work.
 
+### earshot — Stoatworks earshot
+
+<https://github.com/stoatworks-labs/earshot>  
+Licence: MIT  
+Copyright: Stoatworks Labs
+
+external/earshot/ is earshot, the fleet's shared audio front end, as a snapshot: one commit taken with git archive and left unmodified, named in external/earshot/SNAPSHOT. It is built into the plugin by add_subdirectory and supplies the capture device, chosen by name with a Silent state, and the audio analysis the plugin reads every frame. It brings miniaudio with it, credited below.
+
+### The device menu — Stoatworks spasis, by way of woofer and rubens
+
+<https://github.com/stoatworks-labs/spasis>  
+Licence: MIT  
+Copyright: Stoatworks Labs
+
+The singing coil's Pitch Source menu follows spasis's rules: devices remembered by a key of their name, never by index; a missing device shown as missing, never swapped for the default; spare "(none)" slots in an option whose element count is fixed at declaration, refilled by Rescan Inputs; and the status lamp's colours (source/Singing.cpp, source/render/Lamp.cpp). The FLYBACK_NO_DEVICES switch for verification follows woofer's and rubens's. Adapted.
+
 ### Audio analyser and host-clock vote — Stoatworks rosette
 
 <https://github.com/stoatworks-labs/rosette>  
@@ -59,6 +75,16 @@ Copyright: the PNG Reference Library authors
 Arrives inside the FFGL submodule, under the SDK's CustomThumbnail sample.
 
 Part of the upstream SDK tree rather than something these plugins call directly — listed because it is present in the checkout.
+
+### miniaudio, inside earshot
+
+<https://github.com/mackron/miniaudio>  
+Licence: Public Domain (Unlicense) or MIT-0, at your choice  
+Copyright: David Reid
+
+Arrives inside the vendored earshot snapshot, at external/earshot/third_party/miniaudio/miniaudio.h, unmodified. Not vendored separately.
+
+earshot's capture backend: it lists the capture devices and runs the audio callback, on CoreAudio and WASAPI. The plugin never calls miniaudio itself; it arrives only with earshot.
 
 ## Inspirations
 
