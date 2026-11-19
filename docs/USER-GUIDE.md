@@ -622,8 +622,8 @@ it doesn't count as a flash the way broadcast and web guidance measure one: a ch
 over a large area, more than three times a second. The singing coil is the part to watch,
 because it fires at the music rather than at a rate you set.
 
-**What was measured.** Each setting was rendered by the offline harness for 7.5 seconds at
-640×360 and 60 frames a second, and every flash counted over the whole frame and over each third
+**What was measured.** Each setting was rendered by the offline harness for 7.5 seconds (the test
+tune for its whole 12.25) at 640×360 and 60 frames a second, and every flash counted over the whole frame and over each third
 of it (a 5×5 grid of overlapping windows), against the three-a-second line. The singing coil was
 fed the audio of each of Resolume's eighteen demo clips, and the browser demo's 12-second test
 tune; the Over effect ran on each clip with its own audio and was compared with the bare clip.
