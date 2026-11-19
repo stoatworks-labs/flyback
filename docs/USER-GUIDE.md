@@ -27,14 +27,18 @@ from Resolume.*
 > times the efficiency to 1.9e-5, inside a derived bound of 4.1e-5. Over a clip of a bright disc
 > on black, 600 of 600 strikes go into the disc. Thirty-one models that are wrong on purpose are
 > all detected, eighteen one-character mutants of the shipped code are all caught, and all 51
-> parameters swept are live where they apply. It's **never been loaded into Resolume on macOS**. Apart from
-> the Windows run below, the one host it's run in is the fleet's own test host, `oxbow`, which
-> reads both plugins and renders through each.
-> On Windows, a build of v0.1.0 loads, registers and renders in Resolume Arena 7.27.1, with every
-> control matching what the plugins declare, and 33 of the source's and 43 of the effect's controls
-> shown moving the picture. That was on software rendering, so it says nothing about a GPU. Eight
-> of the source's machine controls act through discharges that come and go between the test's
-> single frames and couldn't be shown there, and the audio controls had no sound device to hear.
+> parameters swept are live where they apply.
+> On macOS, v0.2.0 has had one short session in Resolume Arena 7.29.0: both plugins register with
+> every control, and with the coil at rest the picture is v0.1.0's pixel for pixel. Resolume's audio
+> reaches it there, too: with one of Resolume's demo beats playing, **Audio Fires** fired the coil
+> on the beat. The singing coil wasn't switched on there, because every choice above Off opens a
+> real input.
+> On Windows, v0.2.0 loads, registers and renders in Resolume Arena 7.27.1, with every control
+> matching what the plugins declare, and 39 of the source's and 38 of the effect's controls shown
+> moving the picture. That was on software rendering, so it says nothing about a GPU. A few
+> controls act through discharges that come and go between the test's single frames and couldn't
+> be shown there. With no sound device on that machine, switching the singing coil on only lit the
+> lamp, and nothing broke.
 > Try it on a spare layer before you put it in a show.
 >
 > This codebase was created with AI assistance, directed and reviewed by a human author.
@@ -317,7 +321,10 @@ voltage.
 together.
 
 **Finger X** and **Finger Y:** where the finger is, in the frame, defaults 0.72 and 0.66. In the
-Over effect the finger goes to the clip's brightest region instead.
+Over effect the finger goes to the glass nearest the clip's brightest region instead, and the clip
+already grounds the field there, so **over a clip with bright parts the finger changes nothing**:
+over a still of Resolume's Trinity clip, Finger, Finger X and Finger Y leave every frame identical.
+Over a black clip it touches at Finger X/Y, as in the source.
 
 ---
 
@@ -468,7 +475,8 @@ In the effect, **the clip is ground**. Every part of the picture past the thresh
 grounded conductor in the machine's field, whichever machine it is. The Tesla coil's streamers
 strike into the picture's bright parts (this is the case the harness measures), the other machines'
 discharges are drawn the same way, and with **Finger** on, the plasma globe's finger goes to the
-brightest region of the clip rather than to Finger X/Y. Over a black clip, every strike goes to the
+brightest region of the clip rather than to Finger X/Y, where it adds nothing to the clip's own
+ground (see Finger X/Y). Over a black clip, every strike goes to the
 machine's own grounds instead. The discharge is laid over the clip as light, never pasted over it,
 and the output keeps the clip's alpha.
 
@@ -628,7 +636,7 @@ tune; the Over effect ran on each clip with its own audio and was compared with 
 | SW Flyback, singing, the demo's test tune, defaults (and at Octave −4) | 0 | 0 |
 | SW Flyback, singing, pushed | 0 | 2.5 (two drum loops, and the test tune) |
 | SW Flyback Over, singing, pushed | 1 | 3 (on Beat 003, which has none of its own) |
-| SW Flyback, BPS (v0.1.0's mode), 5 to 40 BPS | 0 | 0 |
+| SW Flyback, BPS (v0.1.0's mode), 5 to 40 BPS and the default 120 | 0 | 0 |
 | SW Flyback Over, BPS, default and 10 BPS | 0 | 1 |
 
 "Pushed" is Efficiency at 10% (its top), the coil at Scale ×2 and, for the Over, Illumination at
@@ -662,9 +670,9 @@ a sweep fails if any control does nothing.
 
 **Assumed, or not verified:**
 
-- **Never loaded into Resolume on macOS.** How 57 parameters in fourteen groups present, whether
-  the X/Y pairs show as position pads, whether Resolume's clock arrives in seconds or milliseconds,
-  and what its FFT bins really are, are all untested in a host.
+- **Only briefly in Resolume on macOS.** Arena's clock arrives in milliseconds and its audio
+  reaches Audio Fires, but how the panel presents, whether the X/Y pairs show as position pads,
+  what the FFT bins hold for a known tone, and Audio Drive, are untested in a host.
 - **Some constants are models, not measurements**: the low-current arc constants that set the
   ladder's height, the streamer propagation field, the glass's coupling in the globe, a toroid
   treated as a sphere, and the line weights behind each gas's colour.

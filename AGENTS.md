@@ -355,9 +355,15 @@ expected number moved.
 
 Assumed, or not yet done:
 
-- **Never loaded into Resolume.** How the panel presents, whether the clock
-  arrives in seconds or milliseconds (voted on, as rosette and millpond do),
-  whether FF_TYPE_XPOS/YPOS pairs show as pads, and what the FFT bins are.
+- **Resolume, briefly.** Arena 7.29.0 on this Mac (2026-11-19, a local
+  universal build beside the signed v0.1.0): both register (58 / 59 REST
+  controls), BPS-off frame and Over at Mix 0 pixel-identical to v0.1.0's, the
+  clock votes milliseconds, and Resolume's FFT reaches Audio Fires (Beat
+  001.wav, Audio on Composition, BPS off: bangs at 1, none at 0). Pitch Source
+  was never switched on there (every choice above Off opens a real device).
+  Arena 7.27.1 on win-lab: the gate (README's Status). Still unknown: how the
+  panel presents, whether the X/Y pairs show as pads (REST calls them
+  ParamRange), and what the 64 bins hold for a known tone.
 - **Windows is built by CI only** (MSVC, `ci.yml` and `release.yml`), and run
   only in Arena on win-lab's software renderer (the README's Status). RGBA32F
   additive blending is standard on DX11-class hardware but untested on one.
@@ -366,7 +372,15 @@ Assumed, or not yet done:
   registration checks and their negative controls, no GL context) and
   `tools/glslc.sh --require`. The pixel checks, and anything only a real driver
   catches, run in `tools/verify.sh` on a Mac with a GPU and nowhere else.
-- **The worker thread has never met a host.** The engine's worst step is
+- **Finger in the Over does nothing over a bright clip** (found by the Arena gate
+  2026-11-19, v0.1.0's code). `GlobeMachine::Finger()` moves the finger to the glass
+  nearest the centroid of the clip's ground cells, which already ground the field there,
+  so Finger, Finger X and Finger Y leave every frame identical over Trinity's still
+  (hvtest `--pipe --effect`, 120 frames, 0.0 difference); over black they act (8-10
+  levels). sweep.py only sweeps them in the source. The guide says so; the model is
+  unchanged, and plugin-bench's expectation marks the effect's three inert with this reason.
+- **The worker thread has met a host only briefly** (the two Arena sessions
+  above, nothing timed). The engine's worst step is
   12 ms (globe) on this CPU; overlapped with the host's work that is hidden
   here, but on a slower machine it still eats the frame.
 - **No racing sparks, no corona current, no breakout-point physics** on the
@@ -625,7 +639,10 @@ oxbow directly with `DYLD_INSERT_LIBRARIES`, never through perl's alarm.
 - **Microphone permission.** A host without it gets bit-exact zeros, which
   the lamp shows as red Silent after 3 s (earshot's rule). Not tried.
 - **Windows**: the mode is built (FLYBACK_SINGING ON since v0.2.0, by CI's MSVC), and has
-  never heard an input there: win-lab, where Arena runs it, has no sound device.
+  never heard an input there: win-lab, where Arena runs it, has no sound device. Switched on
+  there anyway (2026-11-19, Pitch Source = System default): WASAPI listed 0 devices, earshot
+  reported "could not open the default input" and retried, the lamp lit, Rescan, Octave and
+  Gate moved without harm, Off put the picture back, and Arena stayed one process.
 - **The browser demo's singing coil**: its pitch input is the plugin's C++ in
   WebAssembly, compared with hvtest only on the page's test tune at 60 frames
   a second (never at 120 Hz or a variable frame rate, never on a visitor's

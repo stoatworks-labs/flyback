@@ -1,8 +1,9 @@
 # flyback
 
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
-> (Anthropic), directed and reviewed by a human author. It's **never been loaded into Resolume
-> on macOS**. On Windows it loads and renders in Resolume Arena, on software rendering.
+> (Anthropic), directed and reviewed by a human author. It loads, registers and renders in
+> Resolume Arena on macOS (one short session) and on Windows (on software rendering), and
+> Resolume's audio reaches it on the Mac. The singing coil has never heard a real input there.
 > Everything else is measured by an offline harness that drives the real plugin class in a
 > headless GL context, or the engine on its own where a claim doesn't need a GPU, and every
 > check is also run against a wrong model to make sure it can tell. The numbers, and the list
@@ -221,22 +222,47 @@ it has never heard a real input there (see Status).
 
 **v0.2.0, 2026-11-19 (the singing coil; v0.1.0 was 2026-09-24), and still early days.**
 
-It's **never been loaded into Resolume on macOS**. `oxbow probe` reads both
-bundles the way a host does and finds `SW Flyback` / `HV01` / source and
-`SW Flyback Over` / `HV02` / effect, and `oxbow selftest` instantiates each one
-through the host's own path and renders.
+**macOS, in Resolume Arena 7.29.0** (this Mac, M4 Max, 2026-11-19): a local
+universal build of v0.2.0, beside the signed v0.1.0 release in the same
+composition. Both plugins register, the source with 58 controls and the effect
+with 59, the Singing group last: Pitch Source on Off (BPS), listing only Off,
+System default and fourteen "(none)" rows; Octave −4 to +2 on 0; Gate on the
+middle of its travel. With BPS at off, the source's frame is v0.1.0's pixel for
+pixel, and so is the effect's at Mix 0. Moving Octave and Gate and pressing
+Rescan Inputs with Pitch Source Off changed nothing (0.07 levels mean, inside
+the 0.18 between two frames at one setting) and filled no menu. Arena's clock
+arrives in milliseconds. **Resolume's audio reaches the Audio group**: with
+Resolume's own `Beat 001.wav` playing on a layer below, Audio on Composition and
+BPS at off, Audio Fires at 1 threw bangs on the beat, and at 0 none, in v0.1.0
+and v0.2.0 alike (v0.1.0 also went dark when the wav stopped). Pitch Source was
+never switched on there: every choice above Off opens a real capture device, so
+no microphone prompt was raised or answered. The singing coil can't take
+Resolume's audio instead: its spectrum has no pitch in it, so there is no
+host-FFT fallback by design. `oxbow probe` reads both bundles the way a host
+does and finds `SW Flyback` / `HV01` / source and `SW Flyback Over` / `HV02` /
+effect, and `oxbow selftest` instantiates each one through the host's own path
+and renders.
 
-**Windows, in Resolume Arena 7.27.1** (win-lab, Mesa llvmpipe, no GPU,
-2026-09-24): a CI build of this source loads from Extra Effects, both plugins
-register with the right id and type, all 54 (source) and 55 (effect) host
-controls match what the plugin declares, both render, and Arena's log stays
-clean. That's 15 of 15 of the fleet gate's checks, with the audio controls
-skipped because win-lab has no sound device. 33 of the source's controls and 43
-of the effect's measurably moved the picture. Eight of the source's (Belt
-Current, Gap, Sphere Finish, Origin, Rise Speed, Wind, Target X, Target Y) were
-inconclusive: they act through discharges that come and go between the gate's
-single-frame grabs, and the effect shows the same controls live. Software
-rendering says nothing about a GPU or about speed.
+**Windows, in Resolume Arena 7.27.1** (win-lab, Mesa llvmpipe, no GPU).
+v0.2.0's release-workflow DLLs, 2026-11-19: both plugins load from Extra
+Effects and register with the right id and type, all 58 (source) and 59
+(effect) host controls match what the plugins declare (v0.1.0's 54 and 55
+unchanged, the Singing group after them), both render, Arena's log stays clean
+and Arena is the same process throughout. 39 of the source's controls and 38
+of the effect's moved the picture; Rod Length and Rise Speed (source) and Rise
+Speed and Sphere Finish (effect) were inconclusive, acting through discharges
+that come and go between the gate's single-frame grabs. **The effect's Finger,
+Finger X and Finger Y change nothing over the gate's clip**, and that is
+v0.1.0's code: in the Over the finger goes to the glass nearest the clip's
+brightest region, which the clip already grounds, so over a clip with bright
+parts it adds nothing (the harness agrees, frame for frame; over a black clip
+it acts). The singing controls were skipped, because win-lab has no sound
+device, so they were tried by hand there: with Pitch Source on System default,
+WASAPI lists no device, earshot reports the default input missing and keeps
+retrying, the lamp lights in the corner, Rescan Inputs, Octave and Gate move
+without harm, and back on Off the lamp goes and the picture is the coil again,
+with Arena the same process from start to end. v0.1.0 (2026-09-24) passed the
+same gate's checks. Software rendering says nothing about a GPU or about speed.
 
 There's a [user guide](docs/USER-GUIDE.md) and a
 [browser demo](https://flyback-demo.stoatworks-labs.com/), but no OpenFX port.
@@ -289,16 +315,18 @@ as a ceiling. Either way a frame costs well under the 16.7 ms of 60 fps at
 
 What **isn't** verified yet:
 
-- **Never in a host on macOS.** I don't know yet how 57 parameters in fourteen
-  groups present, whether Resolume's clock arrives in seconds or milliseconds
-  (the plugin works it out by vote), or what its FFT bins really are.
+- **One short session in a host on macOS.** Arena 7.29.0's clock arrives in
+  milliseconds and its audio reaches Audio Fires, but what its 64 bins hold for
+  a known tone is still unmeasured, Audio Drive wasn't tried there, and nothing
+  was timed in a host.
 - **The engine runs on a worker thread, one frame late.** Each frame draws
   the engine step started the frame before, so the picture is one frame
   behind the clock, and the very first frame shows the apparatus with no
   discharge light. The render thread only waits for whatever part of the
   engine's step (worst 11–12 ms, the globe) didn't overlap the host's own
   work. It's bit-exact against the synchronous engine one frame earlier
-  (`--determinism`), but it's never run inside a host.
+  (`--determinism`), and inside a host it has only run in the two short
+  Arena sessions above.
 - **Some constants are models, not measurements.** The low-current Ayrton
   constants (D = 750 W/m sets the ladder's height), the streamer propagation
   field, the glass's coupling in the globe, a toroid treated as a sphere, and
